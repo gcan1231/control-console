@@ -1,0 +1,9 @@
+{
+  "name": "local-console-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/demo.test.mjs",
+    "start": "python tools/preview_server.py"
+  }
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>总控制台 · 流程演示</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/styles.css"></head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">总</span><div>总控制台<small>运营协同工作台</small></div></div>
+    <div class="nav-caption">工作空间</div>
+    <nav aria-label="主导航">
+      <button data-page="tasks" class="active"><span>▤</span>任务总表</button>
+      <button data-page="sources"><span>◫</span>数据快照</button>
+      <button data-page="publish"><span>⇧</span>发文交接</button>
+      <button data-page="hosts"><span>▣</span>执行主机</button>
+      <button data-page="diagrams"><span>⌘</span>流程与架构</button>
+    </nav>
+    <div class="sidebar-note"><span class="dot"></span> 当前计划 003<strong>前端 Demo · 待确认思路</strong><p>单机闭环优先<br>局域网分工后续加入</p></div>
+    <footer>LOCAL WORKSPACE <span>v0.1</span></footer>
+  </aside>
+  <main>
+    <header class="topbar"><div><span class="breadcrumb">工作空间 / </span><span id="page-label">任务总表</span></div><div class="top-right"><span class="local-badge">● 仅本机</span><span class="avatar">演</span><span>演示运营</span></div></header>
+    <div class="demo-banner"><span>演示模式</span>所有账号、任务与文件均为虚构；操作只改变页面中的模拟状态。<button id="reset">重置演示 ↻</button></div>
+    <section class="page-heading"><div><div class="eyebrow">CONTROL CONSOLE</div><h1 id="page-title">每天的任务，都有明确下一步。</h1><p id="page-subtitle">从固定任务表出发，贯穿素材、剪辑与发文交接。</p></div><div class="heading-controls"><label for="scenario">演示场景</label><select id="scenario"></select><button class="primary" id="import-demo">＋ 模拟导入任务</button></div></section>
+    <section id="page-content" aria-live="polite"></section>
+    <div id="toast" role="status" hidden></div>
+  </main>
+  <div id="drawer-backdrop" hidden></div><aside id="drawer" class="drawer" aria-label="任务详情" hidden></aside>
+  <script type="module" src="/app.js"></script>
+</body></html>
