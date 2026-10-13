@@ -8,11 +8,11 @@
 
 ## 启动和停止
 
-安装Python 3.9及以上后，在项目目录运行`python tools/preview_server.py`，或双击根目录的`启动Demo.bat`。访问终端打印的本机地址，默认[http://127.0.0.1:8860/](http://127.0.0.1:8860/)。不会自动打开浏览器。
+安装Python 3.10及以上后，在项目目录运行`python tools/preview_server.py`，或双击根目录的`启动Demo.bat`。访问终端打印的本机地址，默认[http://127.0.0.1:8860/?workspace=demo](http://127.0.0.1:8860/?workspace=demo)。不会自动打开浏览器。
 
 端口占用时使用`python tools/preview_server.py --port 8861`，或`启动Demo.bat --port 8861`；启动器不会终止占用端口的进程。停止时在终端按Ctrl+C。
 
-可选命令：`npm start`启动预览；`npm test`运行Demo测试。项目无npm依赖。
+可选命令：`npm run demo`启动只读预览；`npm test`运行Demo测试。`npm start`现在启动004本地持久化工作台（默认8861），`npm run test:local`运行本地导入规则测试。项目无npm依赖。
 
 ## 图入口
 

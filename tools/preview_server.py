@@ -72,7 +72,7 @@ def main():
         server = ThreadingHTTPServer(("127.0.0.1", args.port), PreviewHandler)
     except OSError as error:
         parser.exit(1, f"Cannot bind 127.0.0.1:{args.port}: {error}\nChoose another --port; existing processes are left untouched.\n")
-    print(f"Demo: http://127.0.0.1:{args.port}/", flush=True)
+    print(f"Demo: http://127.0.0.1:{args.port}/?workspace=demo", flush=True)
     print("Read-only fictional demo. Press Ctrl+C to stop.", flush=True)
     try:
         server.serve_forever()

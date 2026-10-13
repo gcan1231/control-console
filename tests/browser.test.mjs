@@ -49,7 +49,7 @@ async function readinessMatrix(){
  for(const [s,allow] of [['categorywrong',[]],['categorymissing',[]],['six',['both','douyin','qianchuan']],['regularmissing',['douyin']],['speedmissing',['qianchuan']]])for(const m of ['both','douyin','qianchuan']){await scenario(s);await nav('publish');await page.locator('#publish-mode').selectOption(m);await nav('tasks');await open(1);assert.equal(await page.locator('#drawer [data-page="publish"]').isDisabled(),!allow.includes(m),`${s}/${m}`);await close();}
 }
 try {
- await page.goto(base);await count(12);
+ await page.goto(base+'?workspace=demo');await count(12);
  assert.equal(await page.locator('#task-table [data-cell="status"]').count(),12);
  const visibleRows=await page.locator('#task-table tbody tr[data-task]').evaluateAll(es=>es.filter(e=>{const r=e.getBoundingClientRect(),p=e.closest('table').parentElement.getBoundingClientRect();return r.top>=p.top&&r.bottom<=Math.min(innerHeight,p.bottom);}).length);if(visibleRows<8)findings.push(`1440 first screen only ${visibleRows} full rows`);
  await inputStability();await drawerKeyboard();checks.push('默认进度/首屏8行、搜索焦点光标composition与抽屉键盘');
