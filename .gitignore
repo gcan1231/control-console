@@ -30,7 +30,7 @@ Thumbs.db
 Desktop.ini
 
 # Local business data, execution state, and verification artifacts
-data/
+/data/
 runtime/
 local-config/
 test-results/
