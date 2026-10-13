@@ -30,3 +30,9 @@
 .local-material-detail>h3:first-child {margin-top:0;padding-top:0;border-top:0}
 .local-material-detail>dl {margin-block:12px}
 .local-material-detail>p {font-size:13px;margin-top:8px;overflow-wrap:anywhere}
+.local-editing-output {margin-top:12px;border:1px solid var(--line);border-radius:6px;padding:12px;min-width:0}
+.local-editing-output>h3 {margin-top:0;padding-top:0;border:0}
+.local-editing-output>p {font-size:13px;margin-top:8px;overflow-wrap:anywhere}
+.local-editing-output label {display:block;margin-top:10px}
+.local-editing-output label.local-check {display:flex}
+.local-editing-status {display:grid;gap:4px;justify-items:start}

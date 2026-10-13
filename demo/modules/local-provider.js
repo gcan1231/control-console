@@ -25,4 +25,9 @@ export class LocalProvider {
   materialCollect(packageId) { return this.request('/api/material/collect',{packageId}); }
   materialConfirm(taskId,note) { return this.request('/api/material/confirm',{taskId,note,confirmed:true}); }
   materialRetry(taskId,note) { return this.request('/api/material/retry',{taskId,note}); }
+  editingPrepare(taskIds) { return this.request('/api/editing/prepare',{taskIds}); }
+  editingGui(values) { return this.request('/api/editing/gui',values); }
+  editingCollect(packageId) { return this.request('/api/editing/collect',{packageId}); }
+  editingVerify(taskId,kind,note) { return this.request('/api/editing/verify',{taskId,kind,note,confirmed:true}); }
+  editingRetry(taskId,note) { return this.request('/api/editing/retry',{taskId,note}); }
 }

@@ -7,6 +7,7 @@
     "start": "python tools/local_server.py",
     "demo": "python tools/preview_server.py",
     "test:local": "python -m unittest discover -s tests -p test_local_import.py",
-    "test:material": "python -m unittest discover -s tests -p test_materials.py"
+    "test:material": "python -m unittest discover -s tests -p test_materials.py",
+    "test:editing": "python -m unittest discover -s tests -p test_editing.py"
   }
 }

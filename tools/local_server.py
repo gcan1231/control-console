@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 from control_console.importers import ImportFailure, MAX_BYTES, inspect_workbook
 from control_console.store import ConsoleStore
 from control_console.materials import MaterialService
+from control_console.editing import EditingService
 from tools.preview_server import resolve_request
 
 
@@ -51,13 +52,17 @@ class LocalHandler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == '/api/health':
-            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff']})
+            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff']})
         elif path == '/api/state':
             state=self.server.store.state()
             material=self.server.material.state()
             for task in state['tasks']:
                 task['material']=material['materialTasks'].get(task['id'])
             state.update(material)
+            editing=self.server.editing.state()
+            for task in state['tasks']:
+                task['editing']=editing['editingTasks'].get(task['id'])
+            state.update(editing)
             self.json_response(200,state)
         elif path.startswith('/api/'):
             self.json_response(404,{'ok':False,'error':{'code':'route','message':'接口不存在。','details':[]}})
@@ -140,6 +145,16 @@ class LocalHandler(BaseHTTPRequestHandler):
                 result = self.server.material.confirm(body.get('taskId'),body.get('note'),body.get('confirmed'))
             elif path == '/api/material/retry':
                 result = self.server.material.retry(body.get('taskId'),body.get('note'))
+            elif path == '/api/editing/prepare':
+                result = self.server.editing.prepare(body.get('taskIds'))
+            elif path == '/api/editing/gui':
+                result = self.server.editing.gui(body.get('packageId'),body)
+            elif path == '/api/editing/collect':
+                result = self.server.editing.collect(body.get('packageId'))
+            elif path == '/api/editing/verify':
+                result = self.server.editing.verify(body.get('taskId'),body.get('kind'),body.get('note'),body.get('confirmed'))
+            elif path == '/api/editing/retry':
+                result = self.server.editing.retry(body.get('taskId'),body.get('note'))
             else:
                 self.json_response(404,{'ok':False,'error':{'code':'route','message':'接口不存在。','details':[]}})
                 return
@@ -157,6 +172,7 @@ def create_server(port, runtime_dir):
     try:
         server.store = ConsoleStore(runtime_dir)
         server.material = MaterialService(server.store)
+        server.editing = EditingService(server.store,server.material)
         server.token = secrets.token_urlsafe(32)
         return server
     except Exception:
