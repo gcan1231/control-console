@@ -28,3 +28,20 @@ coverage/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Local business data, execution state, and verification artifacts
+data/
+runtime/
+local-config/
+test-results/
+__screenshots__/
+*.xlsx
+*.xls
+*.csv
+*.tsv
+*.mp4
+*.mov
+*.mkv
+*.sqlite
+*.sqlite3
+*.db
