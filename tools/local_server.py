@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from control_console.importers import ImportFailure, MAX_BYTES, inspect_workbook
 from control_console.store import ConsoleStore
+from control_console.materials import MaterialService
 from tools.preview_server import resolve_request
 
 
@@ -50,9 +51,14 @@ class LocalHandler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == '/api/health':
-            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage']})
+            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff']})
         elif path == '/api/state':
-            self.json_response(200,self.server.store.state())
+            state=self.server.store.state()
+            material=self.server.material.state()
+            for task in state['tasks']:
+                task['material']=material['materialTasks'].get(task['id'])
+            state.update(material)
+            self.json_response(200,state)
         elif path.startswith('/api/'):
             self.json_response(404,{'ok':False,'error':{'code':'route','message':'接口不存在。','details':[]}})
         else:
@@ -122,6 +128,18 @@ class LocalHandler(BaseHTTPRequestHandler):
                 result = self.server.store.set_aliases(body.get('aliases'))
             elif path == '/api/tasks/review':
                 result = self.server.store.review_task(body.get('taskId'),body.get('note',''),body.get('duplicateConfirmed'))
+            elif path == '/api/material/settings':
+                result = self.server.material.settings(body.get('port'),body.get('database'))
+            elif path == '/api/material/prepare':
+                result = self.server.material.prepare(body.get('taskIds'))
+            elif path == '/api/material/send':
+                result = self.server.material.send(body.get('packageId'))
+            elif path == '/api/material/collect':
+                result = self.server.material.collect(body.get('packageId'))
+            elif path == '/api/material/confirm':
+                result = self.server.material.confirm(body.get('taskId'),body.get('note'),body.get('confirmed'))
+            elif path == '/api/material/retry':
+                result = self.server.material.retry(body.get('taskId'),body.get('note'))
             else:
                 self.json_response(404,{'ok':False,'error':{'code':'route','message':'接口不存在。','details':[]}})
                 return
@@ -138,6 +156,7 @@ def create_server(port, runtime_dir):
     server = ThreadingHTTPServer(('127.0.0.1',port),LocalHandler)
     try:
         server.store = ConsoleStore(runtime_dir)
+        server.material = MaterialService(server.store)
         server.token = secrets.token_urlsafe(32)
         return server
     except Exception:

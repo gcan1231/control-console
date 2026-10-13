@@ -8,3 +8,25 @@
 .local-product-title {display:block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .local-workspace .local-facts dd {overflow-wrap:anywhere}
 .local-workspace .local-facts dd.local-id {white-space:normal}
+.local-material-settings,.local-material-selection,.local-material-packages {margin-bottom:16px}
+.local-material-settings {padding:18px;display:grid;gap:12px}
+.local-material-settings label {display:grid;gap:6px;font-size:13px;min-width:0}
+.local-material-settings input {width:100%;min-width:0}
+.local-material-settings .primary {justify-self:start}
+.local-material-actions {display:flex;flex-wrap:wrap;gap:8px}
+.local-material-selection table {min-width:740px}
+.local-material-selection input[type="checkbox"] {min-height:18px;width:18px;cursor:pointer}
+.local-material-detail {min-width:0}
+.local-material-detail ul {padding-left:20px}
+.local-material-detail li {margin-block:8px;overflow-wrap:anywhere}
+.local-material-detail pre {white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 Consolas,monospace}
+.local-material-detail label {display:block;margin-top:12px}
+.local-material-detail label.local-check {display:flex;gap:8px;align-items:flex-start}
+.local-material-detail input[type="checkbox"] {min-height:18px;width:18px;flex-shrink:0}
+.local-material-detail button {margin-top:10px}
+.local-material-packages h3 {overflow-wrap:anywhere}
+.local-material-evidence,.local-original-details {border:1px solid var(--line);border-radius:6px;padding:12px;margin-top:12px}
+.local-material-evidence>summary,.local-original-details>summary {font-weight:600;font-size:13px;padding:3px 0}
+.local-material-detail>h3:first-child {margin-top:0;padding-top:0;border-top:0}
+.local-material-detail>dl {margin-block:12px}
+.local-material-detail>p {font-size:13px;margin-top:8px;overflow-wrap:anywhere}

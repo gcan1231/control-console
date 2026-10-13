@@ -19,4 +19,10 @@ export class LocalProvider {
   commit(file) { return this.request('/api/import/commit',file); }
   aliases(aliases) { return this.request('/api/settings/aliases',{aliases}); }
   review(taskId,note,duplicateConfirmed) { return this.request('/api/tasks/review',{taskId,note,duplicateConfirmed}); }
+  materialSettings(port,database) { return this.request('/api/material/settings',{port,database}); }
+  materialPrepare(taskIds) { return this.request('/api/material/prepare',{taskIds}); }
+  materialSend(packageId) { return this.request('/api/material/send',{packageId}); }
+  materialCollect(packageId) { return this.request('/api/material/collect',{packageId}); }
+  materialConfirm(taskId,note) { return this.request('/api/material/confirm',{taskId,note,confirmed:true}); }
+  materialRetry(taskId,note) { return this.request('/api/material/retry',{taskId,note}); }
 }
