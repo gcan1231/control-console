@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {"title":"总控制台目标架构 · 先单机，后局域网","locale":"zh-CN","quality_profile":"showcase","output":".archify/architecture-console-20261013-142225/architecture.html"},
+  "components": [
+    {"id":"operator","type":"external","label":"运营与操作人员","sublabel":"每日选品 / 人工确认","pos":[40,70],"size":[200,80]},
+    {"id":"web","type":"frontend","label":"本地网页工作台","sublabel":"任务原16列 + 独立进度","tag":"本轮：纯前端Demo","pos":[370,70],"size":[220,80]},
+    {"id":"snapshots","type":"database","label":"本地只读快照","sublabel":"任务 / 商品类别 / 账号F列","pos":[40,300],"size":[240,90]},
+    {"id":"control","type":"security","label":"任务与品类门禁","sublabel":"证据齐全才进入执行","tag":"单机MVP规划","pos":[370,300],"size":[220,90]},
+    {"id":"state","type":"database","label":"独立任务状态","sublabel":"批次 / 原行 / 回执 / 文件","pos":[750,300],"size":[220,90]},
+    {"id":"online","type":"external","label":"公司在线文档","sublabel":"商品库 / 协同表 / 账号表","tag":"永久只读","pos":[40,540],"size":[240,80]},
+    {"id":"adapters","type":"backend","label":"阶段适配与交接","sublabel":"隔离工作副本 / 结果回收","tag":"规划：模块化接口","pos":[370,540],"size":[220,90]},
+    {"id":"lan","type":"backend","label":"局域网执行端","sublabel":"主机分配 / 心跳 / 文件传输","tag":"008后续，不在首版","pos":[750,540],"size":[240,90]},
+    {"id":"material","type":"backend","label":"现有找素材软件","sublabel":"候选人工确认 / 按账号下载","pos":[40,800],"size":[250,90]},
+    {"id":"editor","type":"backend","label":"现有VideoClean","sublabel":"GUI参数确认与启动 / 报告","pos":[370,800],"size":[250,90]},
+    {"id":"publisher","type":"backend","label":"现有按键发文软件","sublabel":"五槽各一个账号 / 人工启动","pos":[750,800],"size":[250,90]}
+  ],
+  "connections": [
+    {"id":"use","from":"operator","to":"web","label":"本机浏览器","variant":"emphasis"},
+    {"id":"control-use","from":"web","to":"control","label":"任务操作","variant":"emphasis"},
+    {"id":"read","from":"snapshots","to":"control","label":"只读"},
+    {"id":"state-write","from":"control","to":"state","label":"独立记录"},
+    {"id":"download","from":"online","to":"snapshots","label":"人工下载副本","variant":"dashed"},
+    {"id":"dispatch","from":"control","to":"adapters","label":"校验通过","variant":"security"},
+    {"id":"future","from":"adapters","to":"lan","label":"后续分配","variant":"dashed"},
+    {"id":"material-work","from":"adapters","to":"material","label":"表与素材根"},
+    {"id":"edit-work","from":"adapters","to":"editor","label":"工作副本"},
+    {"id":"publish-work","from":"adapters","to":"publisher","label":"五表与成片根"}
+  ],
+  "cards":[
+    {"dot":"cyan","title":"当前交付","items":["网页只模拟操作；适配器和状态存储尚未接入","真实任务表及账号资料不进入Demo"]},
+    {"dot":"emerald","title":"单机MVP职责","items":["原16列保持，J只保留端口记忆提示","各软件写自己的工作副本，由总控回收结果","素材、普通成片和变速成片分开核验"]},
+    {"dot":"amber","title":"人工步骤与后续","items":["素材候选确认、剪辑参数启动、发文启动保留原界面","发布回执与人工核验分别保存","单机验收后才实施008局域网主机分工"]}
+  ]
+}

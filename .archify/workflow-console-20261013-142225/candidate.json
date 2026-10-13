@@ -1,0 +1,389 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "单机MVP协同流程 · 以固定任务表贯穿",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": ".archify/workflow-console-20261013-142225/workflow.html"
+  },
+  "lanes": [
+    {
+      "id": "intake",
+      "label": "只读输入与门禁"
+    },
+    {
+      "id": "exception",
+      "label": "阻塞与恢复",
+      "variant": "exception"
+    },
+    {
+      "id": "material",
+      "label": "找素材与人工确认"
+    },
+    {
+      "id": "editor",
+      "label": "剪辑交接与产物"
+    },
+    {
+      "id": "publish",
+      "label": "五槽发文与回执"
+    },
+    {
+      "id": "verify",
+      "label": "结果人工核验"
+    }
+  ],
+  "mainPath": [
+    "snapshots",
+    "import",
+    "headers",
+    "category",
+    "handoff",
+    "search",
+    "review",
+    "download",
+    "edit-copy",
+    "edit-start",
+    "render",
+    "artifacts",
+    "mode",
+    "slots",
+    "publish-start",
+    "receipts",
+    "verify",
+    "done"
+  ],
+  "nodes": [
+    {
+      "id": "snapshots",
+      "lane": "intake",
+      "col": 0,
+      "type": "external",
+      "label": "人工取得副本",
+      "sublabel": "在线文档永久只读",
+      "width": 156,
+      "yOffset": -52.0
+    },
+    {
+      "id": "import",
+      "lane": "intake",
+      "col": 0,
+      "type": "frontend",
+      "label": "导入总任务表",
+      "sublabel": "原表保留 / 内部批次",
+      "width": 156,
+      "yOffset": 52.0
+    },
+    {
+      "id": "headers",
+      "lane": "intake",
+      "col": 1,
+      "type": "security",
+      "label": "固定16列校验",
+      "sublabel": "表头 / 长ID / J原值",
+      "tag": "缺字段阻止",
+      "width": 156,
+      "yOffset": -90
+    },
+    {
+      "id": "category",
+      "lane": "intake",
+      "col": 1,
+      "type": "security",
+      "label": "账号品类校验",
+      "sublabel": "商品类别 + 账号F列",
+      "tag": "缺证据或错配阻止",
+      "width": 156,
+      "yOffset": 90
+    },
+    {
+      "id": "handoff",
+      "lane": "material",
+      "col": 2,
+      "type": "backend",
+      "label": "准备素材交接",
+      "sublabel": "按账号独立工作副本",
+      "width": 156,
+      "yOffset": -156.0
+    },
+    {
+      "id": "search",
+      "lane": "material",
+      "col": 2,
+      "type": "backend",
+      "label": "找素材搜索",
+      "sublabel": "现有本地服务",
+      "width": 156,
+      "yOffset": -52.0
+    },
+    {
+      "id": "review",
+      "lane": "material",
+      "col": 2,
+      "type": "external",
+      "label": "候选人工确认",
+      "sublabel": "原界面预览与勾选",
+      "width": 156,
+      "yOffset": 52.0
+    },
+    {
+      "id": "download",
+      "lane": "material",
+      "col": 2,
+      "type": "backend",
+      "label": "下载原素材",
+      "sublabel": "账号 / 完整商品ID",
+      "width": 156,
+      "yOffset": 156.0
+    },
+    {
+      "id": "edit-copy",
+      "lane": "editor",
+      "col": 3,
+      "type": "backend",
+      "label": "准备剪辑副本",
+      "sublabel": "第一行表头 / Sheet1",
+      "width": 156,
+      "yOffset": -156.0
+    },
+    {
+      "id": "edit-start",
+      "lane": "editor",
+      "col": 3,
+      "type": "external",
+      "label": "GUI确认并启动",
+      "sublabel": "数量 / 正式词表 / 装饰",
+      "width": 156,
+      "yOffset": -52.0
+    },
+    {
+      "id": "render",
+      "lane": "editor",
+      "col": 3,
+      "type": "backend",
+      "label": "剪辑生成成片",
+      "sublabel": "普通 / 变速分别记录",
+      "width": 156,
+      "yOffset": 52.0
+    },
+    {
+      "id": "artifacts",
+      "lane": "editor",
+      "col": 3,
+      "type": "security",
+      "label": "核验报告与文件",
+      "sublabel": "不足不算完成",
+      "width": 156,
+      "yOffset": 156.0
+    },
+    {
+      "id": "mode",
+      "lane": "publish",
+      "col": 4,
+      "type": "frontend",
+      "label": "选择交接目标",
+      "sublabel": "抖音 / 千川 / 两者",
+      "width": 156,
+      "yOffset": -156.0
+    },
+    {
+      "id": "slots",
+      "lane": "publish",
+      "col": 4,
+      "type": "backend",
+      "label": "五槽分账号",
+      "sublabel": "每槽独立表 / 共用根",
+      "width": 156,
+      "yOffset": -52.0
+    },
+    {
+      "id": "publish-start",
+      "lane": "publish",
+      "col": 4,
+      "type": "external",
+      "label": "人工启动发文",
+      "sublabel": "每个端口一个账号",
+      "width": 156,
+      "yOffset": 52.0
+    },
+    {
+      "id": "receipts",
+      "lane": "publish",
+      "col": 4,
+      "type": "database",
+      "label": "回收M/N回执",
+      "sublabel": "保存后读取工作副本",
+      "width": 156,
+      "yOffset": 156.0
+    },
+    {
+      "id": "verify",
+      "lane": "verify",
+      "col": 5,
+      "type": "external",
+      "label": "人工核验结果",
+      "sublabel": "不明结果不自动重发",
+      "width": 156,
+      "yOffset": -52.0
+    },
+    {
+      "id": "done",
+      "lane": "verify",
+      "col": 5,
+      "type": "backend",
+      "label": "任务核验完成",
+      "sublabel": "保留产物与执行记录",
+      "width": 156,
+      "yOffset": 52.0
+    },
+    {
+      "id": "blocked",
+      "lane": "exception",
+      "col": 1,
+      "type": "security",
+      "label": "阻塞 / 失败",
+      "sublabel": "显示原因 / 保留成功产物",
+      "width": 156
+    },
+    {
+      "id": "retry",
+      "lane": "exception",
+      "col": 3,
+      "type": "messagebus",
+      "label": "修复后重试",
+      "sublabel": "只恢复失败阶段",
+      "width": 156
+    }
+  ],
+  "edges": [
+    {
+      "from": "snapshots",
+      "to": "import",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "from": "import",
+      "to": "headers",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "headers",
+      "to": "category",
+      "label": "通过",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "from": "category",
+      "to": "handoff",
+      "label": "允许"
+    },
+    {
+      "from": "handoff",
+      "to": "search"
+    },
+    {
+      "from": "search",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "download",
+      "label": "确认"
+    },
+    {
+      "from": "download",
+      "to": "edit-copy"
+    },
+    {
+      "from": "edit-copy",
+      "to": "edit-start"
+    },
+    {
+      "from": "edit-start",
+      "to": "render"
+    },
+    {
+      "from": "render",
+      "to": "artifacts"
+    },
+    {
+      "from": "artifacts",
+      "to": "mode"
+    },
+    {
+      "from": "mode",
+      "to": "slots"
+    },
+    {
+      "from": "slots",
+      "to": "publish-start"
+    },
+    {
+      "from": "publish-start",
+      "to": "receipts"
+    },
+    {
+      "from": "receipts",
+      "to": "verify"
+    },
+    {
+      "from": "verify",
+      "to": "done",
+      "label": "确认"
+    },
+    {
+      "from": "category",
+      "to": "blocked",
+      "label": "未通过",
+      "role": "error",
+      "variant": "security"
+    },
+    {
+      "from": "blocked",
+      "to": "retry",
+      "role": "branch",
+      "variant": "dashed"
+    },
+    {
+      "from": "retry",
+      "to": "category",
+      "label": "重新校验",
+      "role": "return",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "第一阶段为演示",
+      "items": [
+        "当前只展示设计与模拟状态，不触发这些真实操作",
+        "单机真实接入从004开始，先等待Demo确认"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "目录契约",
+      "items": [
+        "千川：根 / 账号 / 完整商品ID / 成片 / MP4",
+        "抖音：根 / 账号 / 完整商品ID / 成片 / 变速 / MP4",
+        "超过五账号分批，保持账号内原行顺序"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "恢复边界",
+      "items": [
+        "所有阶段失败都保留原表与已成功产物",
+        "软件报告与人工核验分开；发布不明结果先核验",
+        "门禁不通过时阻止后续阶段，不自动猜测分类"
+      ]
+    }
+  ]
+}

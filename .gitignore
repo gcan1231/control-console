@@ -45,3 +45,4 @@ __screenshots__/
 *.sqlite
 *.sqlite3
 *.db
+.archify/**/visual-check/

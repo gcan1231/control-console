@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "b1f878a9-eaf4-4309-942c-6d819e208608",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "E:\\总控制台\\.archify\\architecture-console-20261013-142225\\candidate.json",
+  "output": "E:\\总控制台\\.archify\\architecture-console-20261013-142225\\architecture.html",
+  "specification": {
+    "sha256": "1d3fd46f07e0d5744b7d336da4195710f71c30cde858aa57aa638ec5c615bd7d",
+    "bytes": 3588
+  },
+  "artifact": {
+    "sha256": "a4e48332c9d3bfe805de154b21d31d5ec0ba7efc587460a60b3bace7f9990936",
+    "bytes": 766167
+  }
+}

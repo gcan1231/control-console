@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "508adc6f-afcb-4a51-ae13-2537ccfe6c5e",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "E:\\总控制台\\.archify\\workflow-console-20261013-142225\\candidate.json",
+  "output": "E:\\总控制台\\.archify\\workflow-console-20261013-142225\\workflow.html",
+  "specification": {
+    "sha256": "0850f855128f2c6032c47d6194fb37714a75031e9523d0e3c92f086f41ba7862",
+    "bytes": 8657
+  },
+  "artifact": {
+    "sha256": "937a62094148481230a091449f1726065755619812a10335708f4bb0b28778d1",
+    "bytes": 777054
+  }
+}
