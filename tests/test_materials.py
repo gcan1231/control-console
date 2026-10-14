@@ -115,15 +115,19 @@ class MaterialsTests(unittest.TestCase):
             audits=[json.loads(row[0]) for row in conn.execute("SELECT details FROM audit WHERE action='material_collect'")]
         matching=[entry for audit in audits for entry in audit['states'] if entry.get('snapshot')==str(prior_path)]
         self.assertTrue(matching);self.assertEqual(matching[0]['reportSha256'],hashlib.sha256(prior_bytes).hexdigest())
-        other=self.item(p,'m2','other.mp4');self.jobs([other],ids=['m2'],append=True);self.service.collect(p['id']);self.assertEqual(self.record()['state'],'reported')
+        other=self.item(p,'m2','other.mp4');self.jobs([other],ids=['m2'],append=True);self.service.collect(p['id']);self.assertEqual(self.record()['state'],'ready')
+        self.assertEqual(self.record()['confirmation']['kind'],'source-confirmation')
+        self.assertEqual(self.record()['confirmation']['reportSha256'],self.record()['report']['sha256'])
+        with self.store.connection() as conn:
+            self.assertEqual(conn.execute('SELECT stage FROM tasks WHERE id=?',(self.tasks[0]['id'],)).fetchone()[0],'editing')
         with self.assertRaises(ImportFailure):self.service.confirm(self.tasks[0]['id'],'',True)
         with self.assertRaises(ImportFailure):self.service.confirm(self.tasks[0]['id'],'checked',False)
         file=Path(self.record()['files'][0]['path']);original=file.read_bytes();file.write_bytes(original[:-1]+b'X')
         with self.assertRaises(ImportFailure):self.service.confirm(self.tasks[0]['id'],'checked',True)
-        file.write_bytes(original);self.assertFalse(self.service.confirm(self.tasks[0]['id'],'checked',True)['reused']);self.assertTrue(self.service.confirm(self.tasks[0]['id'],'again',True)['reused']);confirmation=self.record()['confirmation'];self.service.collect(p['id']);self.assertEqual(self.record()['state'],'ready');self.assertEqual(self.record()['confirmation'],confirmation)
+        file.write_bytes(original);self.assertTrue(self.service.confirm(self.tasks[0]['id'],'checked',True)['reused']);self.assertTrue(self.service.confirm(self.tasks[0]['id'],'again',True)['reused']);confirmation=self.record()['confirmation'];self.service.collect(p['id']);self.assertEqual(self.record()['state'],'ready');self.assertEqual(self.record()['confirmation'],confirmation)
         restored=MaterialService(ConsoleStore(self.root/'runtime'));self.assertEqual(restored.state()['materialTasks'][self.tasks[0]['id']]['state'],'ready')
         file.write_bytes(original[:-1]+b'Y')
         with self.assertRaises(ImportFailure):self.service.confirm(self.tasks[0]['id'],'duplicate check',True)
-        self.service.collect(p['id']);self.assertEqual(self.record()['state'],'reported');self.assertIsNone(self.record()['confirmation'])
+        self.service.collect(p['id']);self.assertEqual(self.record()['state'],'failed');self.assertIsNone(self.record()['confirmation'])
 
 if __name__=='__main__':unittest.main()

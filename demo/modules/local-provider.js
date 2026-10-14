@@ -15,8 +15,15 @@ export class LocalProvider {
   }
   state() { return this.request('/api/state'); }
   inspect(file) { return this.request('/api/inspect',file); }
-  preview(file) { return this.request('/api/import/preview',file); }
-  commit(file) { return this.request('/api/import/commit',file); }
+  async preview(file) { const result=await this.request(file.kind==='tasks'?'/api/tasks/import/preview':'/api/import/preview',file);if(file.kind==='tasks')this.revisionToken=result.revisionToken;return result; }
+  commit(file) { return this.request(file.kind==='tasks'?'/api/tasks/import/commit':'/api/import/commit',file.kind==='tasks'?{...file,revisionToken:this.revisionToken}:file); }
+  registerReference(kind,path) { return this.request('/api/reference/register',{kind,path}); }
+  refreshReferences() { return this.request('/api/reference/refresh',{}); }
+  previewAccounts(payload) { return this.request('/api/account-captures/preview',payload); }
+  accountCapture(id) { return this.request('/api/account-captures/draft?captureId='+encodeURIComponent(id)); }
+  confirmAccounts(body) { return this.request('/api/account-captures/confirm',body); }
+  saveAccounts(profiles,confirmed) { return this.request('/api/accounts/verify',{profiles,confirmed}); }
+  editingVerifyBatch(taskIds,kind,confirmed) { return this.request('/api/editing/verify-batch',{taskIds,kind,confirmed,note:''}); }
   aliases(aliases) { return this.request('/api/settings/aliases',{aliases}); }
   review(taskId,note,duplicateConfirmed) { return this.request('/api/tasks/review',{taskId,note,duplicateConfirmed}); }
   materialSettings(port,database) { return this.request('/api/material/settings',{port,database}); }

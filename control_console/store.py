@@ -56,6 +56,20 @@ class ConsoleStore:
                     subject TEXT NOT NULL, details TEXT NOT NULL);
             ''')
             conn.execute('INSERT OR IGNORE INTO settings VALUES (?,?)', ('aliases',dump({'食品-宠物':'食品/宠物','百货个护家清':'百货/个护家清'})))
+            columns = {r[1] for r in conn.execute('PRAGMA table_info(tasks)')}
+            if 'archived' not in columns:
+                conn.execute('ALTER TABLE tasks ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
+            if 'frozen_evidence' not in columns:
+                conn.execute("ALTER TABLE tasks ADD COLUMN frozen_evidence TEXT NOT NULL DEFAULT ''")
+
+    def freeze_evidence(self, conn, task_ids):
+        """Pin source revisions when a task first leaves the console."""
+        for task_id in task_ids:
+            task = conn.execute('SELECT validation,frozen_evidence FROM tasks WHERE id=?',(task_id,)).fetchone()
+            if task and not task['frozen_evidence']:
+                evidence = json.loads(task['validation']).get('evidence',{})
+                evidence['_aliases'] = json.loads(conn.execute('SELECT value FROM settings WHERE key=?',('aliases',)).fetchone()[0])
+                conn.execute('UPDATE tasks SET frozen_evidence=? WHERE id=?',(dump(evidence),task_id))
 
     @contextmanager
     def connection(self, write=False):
@@ -165,7 +179,7 @@ class ConsoleStore:
             products.setdefault(record['productId'],[]).append(record)
         for record in json.loads(active['accounts']['payload']) if 'accounts' in active else []:
             accounts.setdefault(record['accountId'],[]).append(record)
-        all_tasks = conn.execute('SELECT * FROM tasks').fetchall()
+        all_tasks = conn.execute('SELECT * FROM tasks WHERE archived=0').fetchall()
         duplicate_groups = {}
         for task in all_tasks:
             values = json.loads(task['fields'])
@@ -173,6 +187,25 @@ class ConsoleStore:
             if all(key):
                 duplicate_groups.setdefault(key,[]).append(task['id'])
         for task in all_tasks:
+            task_active = active
+            task_products,task_accounts = products,accounts
+            task_aliases = aliases
+            if task['frozen_evidence']:
+                frozen = json.loads(task['frozen_evidence'])
+                task_aliases = frozen.get('_aliases',aliases)
+                task_active = {}
+                for kind, source_id in frozen.items():
+                    if kind.startswith('_'):
+                        continue
+                    source = conn.execute('SELECT * FROM sources WHERE id=? AND kind=?',(source_id,kind)).fetchone()
+                    if source:
+                        task_active[kind] = source
+                task_products,task_accounts = {},{}
+                for record in json.loads(task_active['products']['payload']) if 'products' in task_active else []:
+                    task_products.setdefault(record['productId'],[]).append(record)
+                for record in json.loads(task_active['accounts']['payload']) if 'accounts' in task_active else []:
+                    task_accounts.setdefault(record['accountId'],[]).append(record)
+            canonical = lambda value: task_aliases.get(value.strip(),value.strip())
             fields = json.loads(task['fields'])
             problems = [p for p in json.loads(task['source_issues']) if p['code'] != 'duplicate' or not task['duplicate_confirmed']]
             key = (fields[0],fields[3].strip(),fields[5].strip())
@@ -182,11 +215,12 @@ class ConsoleStore:
             category,allowed = '',[]
             if problems:
                 code,reason = problems[0]['code'],problems[0]['message']
-            elif 'products' not in active or 'accounts' not in active or not active['products']['complete'] or not active['accounts']['complete']:
-                code,reason = 'evidence_missing','分类证据缺失：需要完整商品分类和账号F列快照。'
+            elif 'products' not in task_active or 'accounts' not in task_active or not task_active['products']['complete'] or not task_active['accounts']['complete']:
+                code = 'evidence_missing'
+                reason = '账号F列允许类目尚未独立核对，请先集中核对账号资料。' if 'products' in task_active and task_active['products']['complete'] else '请先登记完整商品分类副本，并独立核对账号F列允许类目。'
             else:
-                goods = products.get(fields[5].strip(),[])
-                owners = accounts.get(task['account_id'],[])
+                goods = task_products.get(fields[5].strip(),[])
+                owners = task_accounts.get(task['account_id'],[])
                 categories = {canonical(c) for r in goods for c in r['categories']}
                 account_versions = {(r['name'],tuple(sorted({canonical(c) for c in r['allowed']}))) for r in owners}
                 if not goods:
@@ -205,14 +239,19 @@ class ConsoleStore:
                     category = next(iter(categories))
                     name,categories_allowed = next(iter(account_versions))
                     allowed = list(categories_allowed)
-                    if name != fields[2]:
+                    approved_names = set.intersection(*(set(r.get('taskNames', [])) for r in owners)) if owners else set()
+                    if name != fields[2] and fields[2] not in approved_names:
                         code,reason = 'account_name','任务抖音名称与账号来源不一致，避免文件归属错配。'
                     elif category not in allowed:
                         code,reason = 'category_mismatch','品类不符：账号只允许 ' + '、'.join(allowed)
                     else:
                         code,reason = 'ok','商品类别与账号F列允许品类一致。'
             validation = {'ok':code == 'ok','code':code,'reason':reason,'issues':problems,
-                          'evidence':{k:active[k]['id'] for k in ('products','accounts') if k in active}}
+                          'evidence':{k:task_active[k]['id'] for k in ('products','accounts') if k in task_active}}
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='merchant_locks'").fetchone():
+                lock=conn.execute('SELECT payload FROM merchant_locks WHERE task_id=?',(task['id'],)).fetchone()
+                if lock and json.loads(lock[0])['fields']!=fields[:9]:
+                    validation.update(ok=False,code='merchant_conflict',reason='任务A:I与商家已锁定版本不同，请先核对原始登记；不会自动覆盖。')
             conn.execute('UPDATE tasks SET validation=?,category=?,allowed=? WHERE id=?',(dump(validation),category,dump(allowed),task['id']))
 
     def set_aliases(self, aliases):
@@ -252,6 +291,7 @@ class ConsoleStore:
                               'fields':fields,'cellMeta':json.loads(row['cell_meta']),'accountId':row['account_id'],'category':row['category'],
                               'allowedCategories':json.loads(row['allowed']),'stage':row['stage'],'validation':json.loads(row['validation']),
                               'duplicateConfirmed':bool(row['duplicate_confirmed']),'note':row['note'],'events':json.loads(row['events']),
+                              'archived':bool(row['archived']),'frozenEvidence':json.loads(row['frozen_evidence']) if row['frozen_evidence'] else {},
                               'sourceReports':{'m':fields[12],'n':fields[13]}})
             batches = [{'id':r['id'],'sourceId':r['source_id'],'filename':r['filename'],'createdAt':r['created_at'],
                         'taskCount':sum(t['batchId']==r['id'] for t in tasks),'workCopies':json.loads(r['copies'])} for r in conn.execute('SELECT * FROM batches ORDER BY created_at,id')]

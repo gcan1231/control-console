@@ -9,9 +9,10 @@ import mimetypes
 import secrets
 import sqlite3
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit,parse_qs
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -19,6 +20,8 @@ from control_console.importers import ImportFailure, MAX_BYTES, inspect_workbook
 from control_console.store import ConsoleStore
 from control_console.materials import MaterialService
 from control_console.editing import EditingService
+from control_console.workbench import WorkbenchService
+from control_console.account_capture import AccountCaptureService
 from tools.preview_server import resolve_request
 
 
@@ -52,7 +55,7 @@ class LocalHandler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == '/api/health':
-            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff']})
+            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff','account-workbench','merchant-locks','local-reference-watch','account-capture']})
         elif path == '/api/state':
             state=self.server.store.state()
             material=self.server.material.state()
@@ -63,7 +66,40 @@ class LocalHandler(BaseHTTPRequestHandler):
             for task in state['tasks']:
                 task['editing']=editing['editingTasks'].get(task['id'])
             state.update(editing)
-            self.json_response(200,state)
+            state['accountCaptures']=self.server.accounts.list_drafts()
+            self.json_response(200,self.server.workbench.enrich(state))
+        elif path == '/api/account-captures/draft':
+            try:
+                query=parse_qs(urlsplit(self.path).query)
+                self.json_response(200,self.server.accounts.draft(query.get('captureId',[None])[0]))
+            except ImportFailure as error:
+                self.json_response(422,{'ok':False,'error':error.as_dict()})
+        elif path == '/api/account-captures/image':
+            try:
+                query=parse_qs(urlsplit(self.path).query)
+                data,mime=self.server.accounts.image(query.get('captureId',[None])[0])
+                self.send_response(200)
+                self.send_header('Content-Type',mime)
+                self.send_header('Content-Length',str(len(data)))
+                self.send_header('Cache-Control','no-store')
+                self.send_header('X-Content-Type-Options','nosniff')
+                self.end_headers()
+                self.wfile.write(data)
+            except (ImportFailure,OSError,ValueError):
+                self.json_response(404,{'ok':False,'error':{'code':'capture_image','message':'原始截图暂不可读。','details':[]}})
+        elif path == '/api/products/image':
+            query=parse_qs(urlsplit(self.path).query)
+            try:
+                data,mime=self.server.workbench.image(query.get('sourceId',[None])[0],query.get('member',[None])[0])
+                self.send_response(200)
+                self.send_header('Content-Type',mime)
+                self.send_header('Content-Length',str(len(data)))
+                self.send_header('Cache-Control','private, max-age=3600')
+                self.send_header('X-Content-Type-Options','nosniff')
+                self.end_headers()
+                self.wfile.write(data)
+            except (ImportFailure,OSError,ValueError):
+                self.json_response(404,{'ok':False,'error':{'code':'image','message':'该来源版本图片暂不可用。','details':[]}})
         elif path.startswith('/api/'):
             self.json_response(404,{'ok':False,'error':{'code':'route','message':'接口不存在。','details':[]}})
         else:
@@ -113,7 +149,7 @@ class LocalHandler(BaseHTTPRequestHandler):
             if not isinstance(body,dict):
                 raise ImportFailure('body','请求必须为JSON对象。')
             path = urlsplit(self.path).path
-            if path in ('/api/inspect','/api/import/preview','/api/import/commit'):
+            if path in ('/api/inspect','/api/import/preview','/api/import/commit','/api/tasks/import/preview','/api/tasks/import/commit'):
                 filename,encoded = body.get('filename'),body.get('content')
                 if not isinstance(filename,str) or not filename.lower().endswith('.xlsx'):
                     raise ImportFailure('file_type','首版只接受.xlsx文件。')
@@ -125,10 +161,26 @@ class LocalHandler(BaseHTTPRequestHandler):
                     raise ImportFailure('base64','文件内容编码不合法。') from error
                 if path == '/api/inspect':
                     result = inspect_workbook(content)
+                elif path == '/api/tasks/import/preview':
+                    result = self.server.workbench.preview_tasks(filename,content,body.get('options'))
+                elif path == '/api/tasks/import/commit':
+                    result = self.server.workbench.commit_tasks(filename,content,body.get('options'),body.get('revisionToken'))
                 elif path.endswith('/preview'):
                     result = self.server.store.preview_import(body.get('kind'),filename,content,body.get('options'))
                 else:
                     result = self.server.store.commit_import(body.get('kind'),filename,content,body.get('options'))
+            elif path == '/api/reference/register':
+                result = self.server.workbench.register(body.get('kind'),body.get('path'))
+            elif path == '/api/reference/refresh':
+                result = self.server.workbench.refresh_sources(force=True)
+            elif path == '/api/accounts/verify':
+                result = self.server.workbench.account_profiles(body.get('profiles'),body.get('confirmed'))
+            elif path == '/api/account-captures/preview':
+                result = self.server.accounts.preview(body)
+            elif path == '/api/account-captures/confirm':
+                result = self.server.accounts.confirm(body)
+            elif path == '/api/editing/verify-batch':
+                result = self.server.editing.verify_batch(body.get('taskIds'),body.get('kind'),body.get('confirmed'),body.get('note',''))
             elif path == '/api/settings/aliases':
                 result = self.server.store.set_aliases(body.get('aliases'))
             elif path == '/api/tasks/review':
@@ -173,6 +225,8 @@ def create_server(port, runtime_dir):
         server.store = ConsoleStore(runtime_dir)
         server.material = MaterialService(server.store)
         server.editing = EditingService(server.store,server.material)
+        server.workbench = WorkbenchService(server.store)
+        server.accounts = AccountCaptureService(server.store,server.workbench)
         server.token = secrets.token_urlsafe(32)
         return server
     except Exception:
@@ -193,11 +247,28 @@ def main():
         parser.exit(1,f'Cannot start local service: {error}\nExisting processes are left untouched.\n')
     print(f'Local workspace: http://127.0.0.1:{args.port}/',flush=True)
     print('Online documents remain read-only. No business software is executed.',flush=True)
+    stop=threading.Event()
+    def monitor():
+        while not stop.wait(10):
+            try:
+                server.workbench.refresh_sources()
+                material=server.material.state()
+                pending={row['packageId'] for row in material['materialTasks'].values() if row['state'] in ('prepared','sent','review','waiting','outputting','retry','reported')}
+                for package in material['materialPackages']:
+                    if package['state']=='sent' and package['id'] in pending:
+                        server.material.collect(package['id'])
+            except (ImportFailure,OSError,sqlite3.Error,ValueError):
+                # Source status records its own error. Failed package results
+                # are visible to the operator; never start or retry software.
+                continue
+    watcher=threading.Thread(target=monitor,name='local-reference-watch',daemon=True)
+    watcher.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        stop.set()
         server.server_close()
 
 

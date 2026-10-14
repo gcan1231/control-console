@@ -59,7 +59,7 @@ class EditingService:
     def _gate(self, conn, task_id):
         task=conn.execute('SELECT * FROM tasks WHERE id=?',(task_id,)).fetchone()
         material=conn.execute('SELECT payload FROM material_tasks WHERE task_id=?',(task_id,)).fetchone()
-        if not task or not material or not json.loads(task['validation'])['ok']:
+        if not task or task['archived'] or not material or not json.loads(task['validation'])['ok']:
             raise ImportFailure('editing_gate','任务必须通过当前品类证据校验。')
         fields=json.loads(task['fields']); material=json.loads(material[0])
         if fields[12].strip() or fields[13].strip() or material['state']!='ready' or not material.get('confirmation') or not material.get('files'):
@@ -104,7 +104,7 @@ class EditingService:
         with self.store.connection(write=True) as conn:
             self.store._revalidate(conn)
             selected=[self._gate(conn,i) for i in task_ids]
-            selected.sort(key=lambda t:(t[0]['batch_id'],t[0]['source_row']))
+            selected.sort(key=lambda t:(t[1][0],t[0]['source_row'],t[0]['batch_id']))
             if len({fields[3] for _,fields,_ in selected})!=1:
                 raise ImportFailure('editing_account','一个剪辑包只接受一个账号。')
             if len({f[5] for _,f,_ in selected})!=len(selected):
@@ -346,33 +346,52 @@ class EditingService:
                 self.material._audit(conn,'editing_collect',mapping['taskId'],{'snapshot':str(path),'sha256':sha,'state':state})
         return {'ok':True,'rows':len(outcomes)}
 
+    def _verification_record(self,conn,task_id,kind):
+        task,fields,_=self._gate(conn,task_id)
+        row=conn.execute('SELECT payload FROM editing_tasks WHERE task_id=?',(task_id,)).fetchone()
+        if not row:raise ImportFailure('editing_verify','任务尚无剪辑交接。')
+        record=json.loads(row[0]);component=record[kind]
+        if not component['available'] or not component['files']:raise ImportFailure('editing_verify','先取得对应成片完整报告与文件证据。')
+        package=self._package(conn,record['packageId']);mapping=next(r for r in package['rows'] if r['taskId']==task_id);self._inputs(mapping)
+        saved=self._workbook(package);current_row=next(r for r in saved if r['row']==mapping['row'])
+        if current_row['fields'][11]!=record['report']['log']:
+            raise ImportFailure('editing_changed','工作副本日志在回收后变化，请重新回收核验。')
+        gui=package['gui']
+        if not gui or self._identity(gui['rulesPath'])!=gui['rulesIdentity'] or self._identity(gui['executablePath'])!=gui['programIdentity']:
+            raise ImportFailure('editing_config','正式词表或实际执行文件变化，请重新核对GUI。')
+        _,outer_raw=self._json(package['reportPath']);_,row_raw=self._json(Path(mapping['inputDir'])/'批量导出报告.json')
+        if hashlib.sha256(outer_raw).hexdigest()!=record['report'].get('outerSha256') or hashlib.sha256(row_raw).hexdigest()!=record['report'].get('rowSha256'):
+            raise ImportFailure('editing_changed','剪辑报告在回收后变化，请重新回收并复核。')
+        for file in component['files']:
+            fresh=self.material._file(file['path'],Path(file['path']).parent,file['bytes'])
+            if fresh['sha256']!=file['sha256']:raise ImportFailure('editing_changed','成片在回收后已变化，请重新回收与核验。')
+        return fields[3],record
+
     def verify(self,task_id,kind,note,confirmed):
-        if not isinstance(task_id,str) or len(task_id)>100 or kind not in ('normal','speed') or confirmed is not True or not isinstance(note,str) or not note.strip() or len(note)>4000:
-            raise ImportFailure('editing_verify','请选择普通或变速，明确人工观看核验并填写记录。')
+        result=self.verify_batch([task_id],kind,confirmed,note)
+        return {'ok':True,'reused':result['verified'][0]['reused']}
+
+    def verify_batch(self,task_ids,kind,confirmed,note=''):
+        if (not isinstance(task_ids,list) or not 1<=len(task_ids)<=100
+            or any(not isinstance(i,str) or not i or len(i)>100 for i in task_ids)
+            or len(set(task_ids))!=len(task_ids) or kind not in ('normal','speed')
+            or confirmed is not True or not isinstance(note,str) or len(note)>4000):
+            raise ImportFailure('editing_verify','请选择同账号1—100个不同任务及普通或变速，并明确已人工观看核验。')
         with self.store.connection(write=True) as conn:
-            self.store._revalidate(conn);self._gate(conn,task_id)
-            row=conn.execute('SELECT payload FROM editing_tasks WHERE task_id=?',(task_id,)).fetchone()
-            if not row:raise ImportFailure('editing_verify','任务尚无剪辑交接。')
-            record=json.loads(row[0]);component=record[kind]
-            if not component['available'] or not component['files']:raise ImportFailure('editing_verify','先取得对应成片完整报告与文件证据。')
-            package=self._package(conn,record['packageId']);mapping=next(r for r in package['rows'] if r['taskId']==task_id);self._inputs(mapping)
-            saved=self._workbook(package);current_row=next(r for r in saved if r['row']==mapping['row'])
-            if current_row['fields'][11]!=record['report']['log']:
-                raise ImportFailure('editing_changed','工作副本日志在回收后变化，请重新回收核验。')
-            gui=package['gui']
-            if not gui or self._identity(gui['rulesPath'])!=gui['rulesIdentity'] or self._identity(gui['executablePath'])!=gui['programIdentity']:
-                raise ImportFailure('editing_config','正式词表或实际执行文件变化，请重新核对GUI。')
-            _,outer_raw=self._json(package['reportPath']);_,row_raw=self._json(Path(mapping['inputDir'])/'批量导出报告.json')
-            if hashlib.sha256(outer_raw).hexdigest()!=record['report'].get('outerSha256') or hashlib.sha256(row_raw).hexdigest()!=record['report'].get('rowSha256'):
-                raise ImportFailure('editing_changed','剪辑报告在回收后变化，请重新回收并复核。')
-            for file in component['files']:
-                fresh=self.material._file(file['path'],Path(file['path']).parent,file['bytes'])
-                if fresh['sha256']!=file['sha256']:raise ImportFailure('editing_changed','成片在回收后已变化，请重新回收与核验。')
-            if component['ready']:return {'ok':True,'reused':True}
-            component.update(ready=True,message='已人工观看复核，可交接对应发布目标。',verification={'time':now(),'note':note.strip(),'reportSha256':record['report']['sha256']})
-            record['state']='ready';conn.execute('UPDATE editing_tasks SET payload=? WHERE task_id=?',(dump(record),task_id))
-            self.material._audit(conn,'editing_verify',task_id,{'kind':kind,'verification':component['verification']})
-        return {'ok':True,'reused':False}
+            self.store._revalidate(conn)
+            checked=[(task_id,*self._verification_record(conn,task_id,kind)) for task_id in task_ids]
+            if len({account for _,account,_ in checked})!=1:
+                raise ImportFailure('editing_account','一次观看确认只接受同一个账号。')
+            verified=[]
+            for task_id,_,record in checked:
+                component=record[kind];reused=bool(component['ready'])
+                if not reused:
+                    component.update(ready=True,message='已人工观看复核，可交接对应发布目标。',verification={'time':now(),'note':note.strip(),'reportSha256':record['report']['sha256']})
+                    record['state']='ready'
+                    conn.execute('UPDATE editing_tasks SET payload=? WHERE task_id=?',(dump(record),task_id))
+                    self.material._audit(conn,'editing_verify',task_id,{'kind':kind,'verification':component['verification']})
+                verified.append({'taskId':task_id,'kind':kind,'reused':reused})
+        return {'ok':True,'verified':verified}
 
     def retry(self,task_id,note):
         if not isinstance(task_id,str) or not isinstance(note,str) or not note.strip() or len(note)>4000:raise ImportFailure('editing_retry','请填写在原GUI处理失败/缺额的重试记录。')

@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {selectedAccountRows,calibrationOptions} from '../demo/modules/account-capture.js';
+const row=()=>({id:'r',fields:['operator','fictional','C','D','E','食品/宠物','G',''],selected:true,verified:true,requiresBinding:true,allowed:['食品/宠物'],taskNames:['虚构账号']});
+test('only selected confirmed rows save and original F stays exact',()=>{const r=row();assert.equal(selectedAccountRows([{captureId:'c',rows:[r,{...row(),verified:false}]}])[0].fields[5],'食品/宠物');assert.equal(selectedAccountRows([{captureId:'c',rows:[r]}])[0].fields[7],'');});
+test('duplicate selected accounts require a choice',()=>assert.throws(()=>selectedAccountRows([{captureId:'c',rows:[row(),row()]}]),/重复账号/));
+test('unmapped F and missing name binding cannot save',()=>{assert.throws(()=>selectedAccountRows([{rows:[{...row(),allowed:[]}]}]),/缺少/);assert.throws(()=>selectedAccountRows([{rows:[{...row(),taskNames:[]}]}]),/缺少/);});
+test('calibration preserves nine image coordinates and crop pixels',()=>{assert.deepEqual(calibrationOptions('0,10,20,30,40,50,60,70,80','1,2,80,90'),{columns:[0,10,20,30,40,50,60,70,80],crop:{x:1,y:2,width:80,height:90}});assert.throws(()=>calibrationOptions('0,1',''),/9个/);assert.throws(()=>calibrationOptions('','0,0,0,3'),/裁剪/);});
+test('non-current accounts can retain source name without task binding',()=>{assert.equal(selectedAccountRows([{captureId:'c',rows:[{...row(),requiresBinding:false,taskNames:[]}]}]).length,1);});
+test('row boundaries support manual multiline calibration',()=>{assert.deepEqual(calibrationOptions('','','10,40,90'),{rowBoundaries:[10,40,90]});assert.throws(()=>calibrationOptions('','','10,5'),/行边界/);});

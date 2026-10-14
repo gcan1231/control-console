@@ -79,14 +79,14 @@ class MaterialService:
             tasks=[]
             for task_id in task_ids:
                 row=conn.execute('SELECT * FROM tasks WHERE id=?',(task_id,)).fetchone()
-                if not row or not json.loads(row['validation'])['ok'] or row['stage']=='reported':
+                if not row or row['archived'] or not json.loads(row['validation'])['ok'] or row['stage']=='reported':
                     raise ImportFailure('material_gate','所有任务必须通过最新品类/重复行校验，且来源无发布回执。')
                 tasks.append({'id':row['id'],'batchId':row['batch_id'],'sourceRow':row['source_row'],'fields':json.loads(row['fields']),'evidence':json.loads(row['validation'])['evidence']})
             if len({t['fields'][3] for t in tasks})!=1 or len({t['fields'][2] for t in tasks})!=1:
                 raise ImportFailure('material_account','一个素材交接包仅允许一个账号。')
             if len({t['fields'][5] for t in tasks})!=len(tasks):
                 raise ImportFailure('material_product','同包同商品会共用目录，请拆分重复商品任务，不能混用。')
-            tasks.sort(key=lambda t:(t['batchId'],t['sourceRow']))
+            tasks.sort(key=lambda t:(t['fields'][0],t['sourceRow'],t['batchId']))
             package_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'material:'+':'.join(t['id'] for t in tasks)))
             existing=conn.execute('SELECT payload FROM material_packages WHERE id=?',(package_id,)).fetchone()
             if existing:
@@ -115,6 +115,7 @@ class MaterialService:
             self.store._write_once(folder/'manifest.json',dump(immutable_manifest).encode('utf-8'))
             conn.execute('INSERT INTO material_packages VALUES (?,?)',(package_id,dump(manifest)))
             conn.executemany('INSERT INTO material_tasks VALUES (?,?,?)',records)
+            self.store.freeze_evidence(conn,task_ids)
             self._audit(conn,'material_prepare',package_id,{'taskIds':task_ids})
         return {'ok':True,'reused':False,'package':manifest}
 
@@ -146,8 +147,8 @@ class MaterialService:
             self.store._revalidate(conn)
             package=self._package(conn,package_id)
             for row in package['rows']:
-                task=conn.execute('SELECT validation FROM tasks WHERE id=?',(row['taskId'],)).fetchone()
-                if not task or not json.loads(task[0])['ok']:
+                task=conn.execute('SELECT validation,archived FROM tasks WHERE id=?',(row['taskId'],)).fetchone()
+                if not task or task['archived'] or not json.loads(task[0])['ok']:
                     raise ImportFailure('material_gate','最新分类证据未通过，不能发送交接。')
         path=Path(package['workbook'])
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=package['sha256']:
@@ -191,7 +192,7 @@ class MaterialService:
         target=Path(path)
         if target.parent.resolve()!=Path(expected_dir).resolve() or target.is_symlink() or not target.resolve().is_relative_to(self.store.root) or not target.is_file() or target.suffix.lower()!='.mp4':
             raise ImportFailure('material_file','素材路径不在本任务独立目录内，或文件丢失。')
-        size=target.stat().st_size
+        before=target.stat();size=before.st_size
         if type(expected_size) is not int or size<=0 or size!=expected_size:
             raise ImportFailure('material_file','素材文件大小与逐条输出报告不符。')
         digest=hashlib.sha256()
@@ -202,6 +203,9 @@ class MaterialService:
             digest.update(header)
             for chunk in iter(lambda:stream.read(1024*1024),b''):
                 digest.update(chunk)
+        after=target.stat()
+        if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):
+            raise ImportFailure('material_file','读取期间素材变化，请等原软件保存完毕后重新回收。')
         return {'path':str(target),'bytes':size,'sha256':digest.hexdigest()}
 
     def _read_row(self, config, package, row):
@@ -280,11 +284,13 @@ class MaterialService:
                 report_path=self.store._path('material',package_id,'reports',report_hash+'.json')
                 self.store._write_once(report_path,snapshot)
                 report.update(snapshot=str(report_path),sha256=report_hash)
-                # Re-reading unchanged valid evidence preserves human review.
-                old_confirmation=record.get('confirmation')
-                same=record.get('files')==files and record.get('report',{}).get('jobs')==report.get('jobs') if record.get('report') else False
-                ready=status=='reported' and same and old_confirmation is not None and evidence['ok']
-                record.update(state='ready' if ready else status,message='素材已人工复核，可进入剪辑交接。' if ready else message,report=report,files=files,confirmation=old_confirmation if ready else None)
+                task=conn.execute('SELECT archived FROM tasks WHERE id=?',(row['taskId'],)).fetchone()
+                if status=='reported' and (record.get('report') or {}).get('jobs')==report.get('jobs') and record.get('files') and record['files']!=files:
+                    status='failed';message='同一逐条输出报告对应文件发生变化，请在原软件重新输出并回收。'
+                ready=status=='reported' and evidence['ok'] and not task['archived']
+                same=record.get('files')==files and (record.get('report') or {}).get('jobs')==report.get('jobs')
+                confirmation=record.get('confirmation') if ready and same and record.get('confirmation') else {'time':now(),'kind':'source-confirmation','reportSha256':report_hash,'evidence':evidence['evidence']} if ready else None
+                record.update(state='ready' if ready else status,message='原软件已确认输出，逐条报告和文件核验通过，可进入剪辑交接。' if ready else message,report=report,files=files,confirmation=confirmation)
                 conn.execute('UPDATE material_tasks SET payload=? WHERE task_id=?',(dump(record),row['taskId']))
                 conn.execute('UPDATE tasks SET stage=? WHERE id=?',('editing' if ready else 'material',row['taskId']))
             self._audit(conn,'material_collect',package_id,{'states':[{'taskId':r['taskId'],'state':s,'reportSha256':report['sha256'],'snapshot':report['snapshot']} for r,s,_,report,_ in outcomes]})
@@ -299,7 +305,7 @@ class MaterialService:
             self.store._revalidate(conn)
             task=conn.execute('SELECT * FROM tasks WHERE id=?',(task_id,)).fetchone()
             row=conn.execute('SELECT payload FROM material_tasks WHERE task_id=?',(task_id,)).fetchone()
-            if not task or not row or not json.loads(task['validation'])['ok']:
+            if not task or task['archived'] or not row or not json.loads(task['validation'])['ok']:
                 raise ImportFailure('material_gate','任务不存在或最新来源校验未通过。')
             record=json.loads(row[0])
             if record['state'] not in ('reported','ready') or not record['files']:

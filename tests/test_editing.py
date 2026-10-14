@@ -39,6 +39,22 @@ class EditingTests(unittest.TestCase):
         self.write_reports(p,outer,details);return outer,details
     def write_reports(self,p,outer,details):
         Path(p['reportPath']).write_text(json.dumps(outer,ensure_ascii=False),encoding='utf8');(Path(p['rows'][0]['inputDir'])/'批量导出报告.json').write_text(json.dumps(details,ensure_ascii=False),encoding='utf8')
+    def test_batch_empty_note_atomic_failure_idempotence_and_archived(self):
+        p=self.prepare();self.service.gui(p['id'],self.body);self.reports(p);self.service.collect(p['id'])
+        task_id=self.task['id']
+        for ids,kind,confirmed in [([], 'normal',True),([task_id]*2,'normal',True),([task_id],'normal',False),([task_id],'other',True),([task_id,'missing'],'normal',True)]:
+            with self.assertRaises(ImportFailure):self.service.verify_batch(ids,kind,confirmed)
+            self.assertFalse(self.record()['normal']['ready'])
+        with self.store.connection(write=True) as conn:conn.execute('UPDATE tasks SET archived=1 WHERE id=?',(task_id,))
+        with self.assertRaises(ImportFailure):self.service.verify_batch([task_id],'normal',True)
+        with self.store.connection(write=True) as conn:conn.execute('UPDATE tasks SET archived=0 WHERE id=?',(task_id,))
+        value=self.service.verify_batch([task_id],'normal',True)
+        self.assertEqual(value,{'ok':True,'verified':[{'taskId':task_id,'kind':'normal','reused':False}]})
+        self.assertEqual(self.record()['normal']['verification']['note'],'')
+        self.assertFalse(self.record()['speed']['ready'])
+        self.assertTrue(self.service.verify_batch([task_id],'normal',True)['verified'][0]['reused'])
+        self.assertFalse(self.service.verify(task_id,'speed','',True)['reused'])
+
     def test_prepare_isolation_identity_no_source_mutation(self):
         source=Path(self.material.state()['materialPackages'][0]['workbook']);before=source.read_bytes();db=self.fixture.db.read_bytes();p=self.prepare();self.assertIsNone(p['gui']);self.assertTrue(self.service.prepare([self.task['id']])['reused'])
         self.assertEqual(source.read_bytes(),before);self.assertEqual(self.fixture.db.read_bytes(),db)
@@ -84,7 +100,7 @@ class EditingTests(unittest.TestCase):
         with self.assertRaises(ImportFailure):self.prepare()
     def test_normal_speed_separate_human_verification_and_restart(self):
         p=self.prepare();self.service.gui(p['id'],self.body);self.reports(p,False);self.service.collect(p['id']);r=self.record();self.assertTrue(r['normal']['available']);self.assertFalse(r['speed']['available']);self.assertFalse(r['normal']['ready'])
-        for kind,note,confirmed in [('normal','',True),('normal','已观看',False),('speed','已观看',True)]:
+        for kind,note,confirmed in [('normal','已观看',False),('speed','已观看',True)]:
             with self.assertRaises(ImportFailure):self.service.verify(self.task['id'],kind,note,confirmed)
         self.assertFalse(self.service.verify(self.task['id'],'normal','虚构观看核验',True)['reused']);self.assertTrue(self.service.verify(self.task['id'],'normal','再确认',True)['reused']);self.assertFalse(self.record()['speed']['ready'])
         self.service.collect(p['id']);self.assertTrue(self.record()['normal']['ready'])
