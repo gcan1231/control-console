@@ -2,3 +2,29 @@
 
 .wbs .ac label.ac-choice,.wbs .ac label.ac-check,.wbs .ac label.ac-verify{display:flex;flex-direction:row;align-items:center;gap:8px;min-height:44px;cursor:pointer}.wbs .ac label.ac-choice{display:inline-flex}.wbs .ac input[type=checkbox]{width:18px;height:18px;min-height:0;flex:none;margin:0;padding:0}.wbs .ac button{min-height:44px}
 .wbs .ac label.ac-choice{margin:4px 12px 4px 0}
+
+/* One account stays in view; navigation preserves the in-memory review. */
+.ac-switch-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px;flex-wrap:wrap}
+.ac-switch-toolbar>label{flex:1;max-width:440px;min-width:180px;margin:0}
+.ac-step-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.ac-step-actions>span{color:var(--muted,#475569);min-width:88px;scroll-margin-top:20px}
+.ac-review-layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px;align-items:start}
+.ac .ac-account-nav{position:sticky;top:16px;display:flex;flex-direction:column;gap:6px;max-height:min(560px,calc(100dvh - 96px));overflow:auto;border:1px solid var(--line,#e2e8f0);border-radius:8px;padding:6px;overscroll-behavior:contain}
+.ac .ac-account-nav button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;margin:0;padding:10px 12px;min-height:82px;border:1px solid transparent;border-radius:6px;flex:none;overflow-wrap:anywhere;background:var(--surface,#fff);color:var(--ink,#0f172a)}
+.ac .ac-account-nav button:hover{background:var(--soft,#f1f5f9);filter:none}
+.ac .ac-account-nav button[aria-current=true]{border-color:#cbd5e1;background:var(--soft,#f1f5f9);box-shadow:inset 3px 0 var(--primary,#1e293b)}
+.ac .ac-account-nav button span{font-size:12px;color:var(--muted,#475569)}
+.ac-current-account{min-width:0;scroll-margin-top:16px}
+.ac .ac-source{position:static;border:1px solid var(--line,#e2e8f0);border-radius:6px;padding:10px 12px;margin-bottom:12px;min-width:0}
+.ac summary{cursor:pointer;min-height:28px;display:list-item;align-content:center}
+.ac .ac-source img{display:block;max-width:100%;width:auto;height:auto;max-height:360px;object-fit:contain;margin-top:8px}
+.ac .ac-source pre{max-height:240px}
+.ac .ac-row{content-visibility:visible;contain-intrinsic-size:none;margin-bottom:0}
+.ac-save-bar{position:sticky;bottom:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--surface,#fff);border-top:1px solid var(--line,#e2e8f0);padding:8px 0;margin-top:16px}
+.ac-save-bar p{color:var(--muted,#475569);font-variant-numeric:tabular-nums}
+.ac-save-bar button{background:var(--primary,#1e293b);color:#fff;border-radius:6px;padding:10px 16px}
+.ac-empty{padding:16px 0;color:var(--muted,#475569)}
+.wbs-manual-accounts>summary{cursor:pointer;min-height:44px;align-content:center}
+.wbs-manual-accounts>h2{margin-top:12px}
+@media(max-width:900px){.ac-review-layout{grid-template-columns:170px minmax(0,1fr)}}
+@media(max-width:650px){.ac-review-layout{grid-template-columns:minmax(0,1fr)}.ac .ac-account-nav{position:static;flex-direction:row;max-height:160px;overflow:auto}.ac .ac-account-nav button{width:170px;max-width:170px}.ac-switch-toolbar>label{max-width:none;min-width:0;flex-basis:100%}.ac-step-actions{width:100%;justify-content:space-between}.ac-save-bar{position:static}.ac-save-bar button{width:100%}}
