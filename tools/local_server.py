@@ -24,6 +24,7 @@ from control_console.workbench import WorkbenchService
 from control_console.account_capture import AccountCaptureService
 from control_console.selection import SelectionService
 from control_console.logs import LogService
+from control_console.publishing import PublishingService
 from tools.preview_server import resolve_request
 
 
@@ -57,7 +58,18 @@ class LocalHandler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == '/api/health':
-            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff','account-workbench','merchant-locks','local-reference-watch','account-capture','daily-selection','log-center']})
+            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff','account-workbench','merchant-locks','local-reference-watch','account-capture','daily-selection','log-center','manual-publishing']})
+        elif path == '/api/publishing/state':
+            try:
+                result=self.server.publishing.state()
+                tasks=self.server.store.state()['tasks']
+                editing=self.server.editing.state()['editingTasks']
+                for task in tasks:
+                    task['editing']=editing.get(task['id'])
+                result['tasks']=tasks
+                self.json_response(200,result)
+            except (OSError,sqlite3.Error):
+                self.json_response(500,{'ok':False,'error':{'code':'publishing_storage','message':'发文交接数据暂不可读，请检查运行目录。','details':[]}})
         elif path in ('/api/logs/state','/api/logs/summary'):
             try:
                 query={k:v[0] for k,v in parse_qs(urlsplit(self.path).query).items()}
@@ -209,6 +221,12 @@ class LocalHandler(BaseHTTPRequestHandler):
                     result = self.server.store.preview_import(body.get('kind'),filename,content,body.get('options'))
                 else:
                     result = self.server.store.commit_import(body.get('kind'),filename,content,body.get('options'))
+            elif path.startswith('/api/publishing/'):
+                operation=path.removeprefix('/api/publishing/')
+                if operation not in ('prepare','handoff','collect','verify'):
+                    self.json_response(404,{'ok':False,'error':{'code':'route','message':'接口不存在。','details':[]}})
+                    return
+                result=getattr(self.server.publishing,operation)(body)
             elif path == '/api/logs/configure':
                 result = self.server.logs.configure(body)
             elif path == '/api/logs/poll':
@@ -282,6 +300,7 @@ def create_server(port, runtime_dir):
         server.accounts = AccountCaptureService(server.store,server.workbench)
         server.selection = SelectionService(server.store,server.workbench)
         server.logs = LogService(runtime_dir, trusted_task_ids=lambda: {t['id'] for t in server.store.state()['tasks']})
+        server.publishing = PublishingService(server.store,server.editing)
         server.token = secrets.token_urlsafe(32)
         return server
     except Exception:
