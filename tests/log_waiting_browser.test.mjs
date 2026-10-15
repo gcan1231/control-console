@@ -33,4 +33,3 @@ try{
  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
  console.log(JSON.stringify({ok:true,checks:['等待文件状态与说明','新文件采集后每3秒页面自动恢复','重复轮询无重复事件'],pageErrors:errors.length,externalRequests:external.length}));
 }finally{await browser?.close();if(server)await new Promise(resolve=>{server.once('exit',resolve);server.stdin.end('\n');});await rm(root,{recursive:true,force:true});}
-
