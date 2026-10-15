@@ -105,6 +105,42 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(page['total'],55); self.assertEqual(len(page['rows']),5); self.assertEqual(page['pageSize'],50)
         with self.assertRaises(ImportFailure): self.add('2026-02-30')
 
+    def test_default_all_dates_latest_and_sales_options_before_pagination(self):
+        self.sources('products',[{**self.goods,'row':n+2,'productId':str(9000000000000000000+n),
+            'statisticDate':'2026-10-15' if n<30 else '2026-10-14',
+            'totalSales':'大于1万' if n<54 else 'all','dailySales':'100~200' if n<30 else ''} for n in range(55)])
+        first=self.service.catalog({'accountId':'fiction-a'})
+        second=self.service.catalog({'accountId':'fiction-a','page':2})
+        self.assertEqual((first['total'],len(first['rows']),len(second['rows'])),(55,50,5))
+        self.assertEqual([r['statisticDate'] for r in first['rows']],['2026-10-15']*30+['2026-10-14']*20)
+        self.assertEqual(first['salesOptions'],second['salesOptions'])
+        self.assertIn({'value':'raw:all','label':'all'},first['salesOptions']['totalSales'])
+        self.assertIn({'value':'missing','label':'未提供'},first['salesOptions']['dailySales'])
+        self.assertEqual(self.service.catalog({'accountId':'fiction-a','range':'latest'})['total'],30)
+        filtered=self.service.catalog({'accountId':'fiction-a','totalSales':'raw: 大于1万 ','dailySales':'missing','search':'虚构','range':'2026-10-14'})
+        self.assertEqual(filtered['total'],24)
+        self.assertEqual(filtered['salesOptions'],first['salesOptions'])
+        self.assertEqual(self.service.catalog({'accountId':'fiction-a','totalSales':'raw:all'})['total'],1)
+        self.assertEqual(self.service.catalog({'accountId':'fiction-a','totalSales':'raw:大于1万','dailySales':'raw:100~200','range':'2026-10-14'})['total'],0)
+
+    def test_sales_options_category_scope_tags_and_invalid_protocol(self):
+        self.sources('products',[{**self.goods,'totalSales':' 1万+ ','dailySales':' '},
+            {**self.goods,'row':3,'productId':'9000000000000000002','categories':['母婴'],'totalSales':'其他类'},
+            {**self.goods,'row':4,'productId':'9000000000000000003','categories':[],'totalSales':'标签独有'}])
+        base={'accountId':'fiction-a'}
+        page=self.service.catalog(base)
+        self.assertEqual(page['salesOptions']['totalSales'],[{'value':'raw:1万+','label':'1万+'}])
+        self.assertEqual(self.service.catalog({**base,'dailySales':'missing'})['total'],1)
+        other=self.service.catalog({**base,'showOther':True})
+        self.assertEqual({o['label'] for o in other['salesOptions']['totalSales']},{'1万+','其他类'})
+        for key in ('totalSales','dailySales'):
+            for value in (None,1,True,[],{},'1万+','raw:','raw:   ','ALL'):
+                with self.subTest(key=key,value=value), self.assertRaises(ImportFailure):
+                    self.service.catalog({**base,key:value})
+        for value in (None,[],{},'bad','2026-02-30'):
+            with self.subTest(range=value), self.assertRaises(ImportFailure):
+                self.service.catalog({**base,'range':value})
+
     def test_protected_old_task_and_lock_bytes_remain_exact(self):
         self.add('2026-10-14'); result=self.generate_day('2026-10-14'); tid=result['taskIds'][0]
         with self.store.connection(write=True) as c:

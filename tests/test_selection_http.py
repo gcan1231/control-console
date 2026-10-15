@@ -3,6 +3,7 @@ import http.client
 import json
 import threading
 import unittest
+from urllib.parse import urlencode
 
 import test_selection as fixtures
 import test_selection_references as reference_fixtures
@@ -93,6 +94,24 @@ class SelectionHttpTests(unittest.TestCase):
         self.assertEqual(json.loads(row['options'])['statisticYear'],2026)
         self.assertEqual(json.loads(row['payload'])[0]['statisticDate'],'2026-10-14')
         self.assertEqual(source.path.read_bytes(),before)
+
+    def test_sales_query_protocol_and_metadata(self):
+        f=self.fixture
+        f.sources('products',[{**f.goods,'row':n+2,'productId':str(9000000000000000000+n),
+            'statisticDate':'2026-10-15' if n<30 else '2026-10-14',
+            'totalSales':'大于1万' if n<54 else 'all','dailySales':'10~20' if n<30 else ''} for n in range(55)])
+        def catalog(**query):
+            return self.request('/api/selection/products?'+urlencode({'accountId':'fiction-a',**query}))
+        status,page=catalog(page=2)
+        self.assertEqual((status,page['total'],len(page['rows'])),(200,55,5))
+        self.assertEqual(catalog(range='latest')[1]['total'],30)
+        status,filtered=catalog(totalSales='raw:大于1万',dailySales='missing',range='2026-10-14',search='虚构')
+        self.assertEqual((status,filtered['total']),(200,24))
+        self.assertEqual(filtered['salesOptions'],page['salesOptions'])
+        self.assertIn({'value':'raw:all','label':'all'},page['salesOptions']['totalSales'])
+        self.assertEqual(catalog(totalSales='raw:all')[1]['total'],1)
+        for query in ({'totalSales':'大于1万'},{'dailySales':'raw:'},{'totalSales':'[]'},{'range':'bad'}):
+            self.assertEqual(catalog(**query)[0],422)
 
 
 if __name__ == '__main__':

@@ -124,25 +124,35 @@ class SelectionService:
         return ''
 
     def catalog(self, body):
+        sales_filters={key:body.get(key,'all') for key in ('totalSales','dailySales')}
+        for value in sales_filters.values():
+            if not isinstance(value,str) or (value not in ('all','missing') and not (value.startswith('raw:') and value[4:].strip())):
+                fail('销量筛选必须为all、missing或raw:原文。')
+        span=body.get('range','all')
+        if span not in ('all','latest'): valid_date(span)
         with self.store.connection() as c:
             sources,accounts,products,tasks,warnings=self._data(c,include_archived=True)
             a=self._account(accounts,body.get('accountId')); drafts=self._rows(c,'selection_drafts')
             # Browsing remains available while F or another selection gate is
             # unresolved. A date needs its own evidence, not eligibility.
+            candidates=[p for p in products if p.get('categories') and (body.get('showOther',False) or p['category'] in a['allowed'])]
+            sales_text=lambda p,key: '' if p.get(key) is None else str(p[key]).strip()
+            sales_options={}
+            for key in sales_filters:
+                values=sorted({sales_text(p,key) for p in candidates})
+                sales_options[key]=[{'value':'raw:'+v if v else 'missing','label':v or '未提供'} for v in values]
             dates=[]
-            for p in products:
-                if not p.get('categories') or (not body.get('showOther',False) and p['category'] not in a['allowed']): continue
+            for p in candidates:
                 try: day=valid_date(p.get('statisticDate'))
                 except ImportFailure: continue
                 dates.append(day)
             dates=sorted(set(dates))
-            span=body.get('range','latest'); wanted=dates[-1] if span=='latest' and dates else span
+            wanted=dates[-1] if span=='latest' and dates else span
             rows=[]
             _,collab=self.workbench._collaboration(c)
-            for p in products:
-                if not p.get('categories'): continue
-                if not body.get('showOther',False) and p['category'] not in a['allowed']: continue
+            for p in candidates:
                 if span!='all' and p.get('statisticDate')!=wanted: continue
+                if any(value!='all' and sales_text(p,key)!=('' if value=='missing' else value[4:].strip()) for key,value in sales_filters.items()): continue
                 if str(body.get('search','')).casefold() not in ' '.join(str(p.get(k,'')) for k in ('title','productId','category','groupO')).casefold(): continue
                 selected=any(r['accountId']==a['id'] and r['date']==body.get('date') and r['fields'][5]==p['productId'] for r in drafts)
                 already=any(r['accountId']==a['id'] and r['date']==body.get('date') and r['fields'][5]==p['productId'] for r in tasks)
@@ -154,7 +164,7 @@ class SelectionService:
             rows.sort(key=lambda p:p.get('statisticDate',''),reverse=True)
             try: page=max(1,int(body.get('page',1)))
             except (ValueError,TypeError): fail('页码无效。')
-            return {'ok':True,'rows':rows[(page-1)*50:page*50],'total':len(rows),'page':page,'pageSize':50,'productDates':dates,'warnings':warnings,'sourceId':sources.get('products',{}).get('id')}
+            return {'ok':True,'rows':rows[(page-1)*50:page*50],'total':len(rows),'page':page,'pageSize':50,'productDates':dates,'salesOptions':sales_options,'warnings':warnings,'sourceId':sources.get('products',{}).get('id')}
 
     def product(self, record_id):
         with self.store.connection() as c:
