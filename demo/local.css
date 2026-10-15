@@ -36,3 +36,6 @@
 .local-editing-output label {display:block;margin-top:10px}
 .local-editing-output label.local-check {display:flex}
 .local-editing-status {display:grid;gap:4px;justify-items:start}
+.local-workspace .selection-nav{display:flex;align-items:center;gap:11px;min-height:44px;padding:10px 12px;margin-bottom:4px;border-radius:6px;color:var(--muted)}
+.local-workspace .selection-nav:hover{color:var(--ink);background:var(--bg)}
+.local-workspace .heading-controls>a{display:inline-flex;align-items:center;gap:8px;min-height:44px;white-space:nowrap}

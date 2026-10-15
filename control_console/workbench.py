@@ -66,7 +66,7 @@ class WorkbenchService:
             conn.execute('UPDATE sources SET active=1 WHERE id=?',(source_id,))
         return source_id
 
-    def register(self, kind, path):
+    def register(self, kind, path, options=None):
         if kind not in ('products','collaboration') or not isinstance(path,str):
             raise ImportFailure('reference_kind','请选择本机商品库或协同表xlsx路径。')
         target=Path(path)
@@ -77,8 +77,14 @@ class WorkbenchService:
         if not target.is_file():
             raise ImportFailure('reference_path','找不到本机xlsx副本，请检查文件路径。')
         with self.guard:
+            if options is not None and not isinstance(options,dict):
+                raise ImportFailure('reference_options','来源解析选项必须为对象。')
+            if options is None:
+                with self.store.connection() as conn:
+                    previous=conn.execute('SELECT s.options FROM reference_paths p JOIN sources s ON s.id=p.source_id WHERE p.kind=? AND p.path=?',(kind,str(target.absolute()))).fetchone()
+                options=json.loads(previous['options']) if previous else {}
             before=self._signature(path)
-            parsed = parse_reference(path,kind)
+            parsed = parse_reference(path,kind,options)
             signature = self._signature(path)
             if signature!=before:
                 raise ImportFailure('source_changed','读取期间来源变化，请等文件保存完成后重试。')

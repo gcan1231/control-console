@@ -8,8 +8,9 @@ const NAMES={tasks:'任务总表',products:'商品分类',accounts:'账号资料
 const PAGES={editing:['剪辑交接','独立工作表由原GUI人工选取与启动；普通和变速成片分别回收与观看复核。'],materials:['素材交接','按账号准备工作表，送到原软件预览；人工操作后只读回收与复核。'],tasks:['每日任务','按日期与账号推进任务，分别查看商家协同与软件进度。'],sources:['来源与账号资料','本机副本自动检测更新；账号允许类目依据飞书F列独立核对。'],publish:['发文交接','计划007待接入，当前仅准备隔离工作副本。'],hosts:['执行主机','本机存储已启用，业务软件尚未接入。'],diagrams:['流程与架构','目标设计包含后续计划，图中能力不代表已经实现。']};
 export async function mountLocalWorkspace() {
   const provider=new LocalProvider(), content=document.querySelector('#page-content'), drawer=document.querySelector('#drawer'), backdrop=document.querySelector('#drawer-backdrop');
-  let state={tasks:[],sources:[],batches:[],aliases:{},counts:{}}, page='tasks', view='progress', search='', gate='', account='', diagram='architecture', offset=0, returnFocus=null, focusSelector='#local-import', requestBusy=false, importSession=0;
+  let state={tasks:[],sources:[],batches:[],aliases:{},counts:{}}, page=new URLSearchParams(location.search).get('page')==='sources'?'sources':'tasks', view='progress', search='', gate='', account='', diagram='architecture', offset=0, returnFocus=null, focusSelector='#local-import', requestBusy=false, importSession=0;
   document.body.classList.add('local-workspace');
+  const selectionNav=document.createElement('a');selectionNav.href='/selection.html';selectionNav.setAttribute('aria-label','每日选品');selectionNav.title='每日选品';selectionNav.className='selection-nav';selectionNav.innerHTML=`${icon('plus')}<span class="nav-text">每日选品</span>`;document.querySelector('[data-page="tasks"]').before(selectionNav);
   const materialNav=document.createElement('button');materialNav.dataset.page='materials';materialNav.setAttribute('aria-label','素材交接');materialNav.title='素材交接';materialNav.innerHTML=`${icon('folder')}<span class="nav-text">素材交接</span>`;document.querySelector('[data-page="sources"]').after(materialNav);
   const editingNav=document.createElement('button');editingNav.dataset.page='editing';editingNav.setAttribute('aria-label','剪辑交接');editingNav.title='剪辑交接';editingNav.innerHTML=`${icon('layers')}<span class="nav-text">剪辑交接</span>`;materialNav.after(editingNav);
   let editingAccount='',editingOffset=0,editingSelected=new Set();
@@ -17,12 +18,12 @@ export async function mountLocalWorkspace() {
   const workbench=createWorkbench({state,onDetails:showTask,onSources:()=>{page='sources';render();},onAction:workbenchAction});
   const sourceSettings=createSourceSettings({state,provider,onRefresh:refresh});
   document.querySelectorAll('[data-icon]').forEach(node=>node.innerHTML=icon(node.dataset.icon));
-  document.querySelector('.sidebar-note strong').textContent='006A · 账号工作台';
+  document.querySelector('.sidebar-note strong').textContent='006A3 · 每日选品';
   document.querySelector('.demo-tag').textContent='本机持久化';
   document.querySelector('.demo-banner p').textContent='先本地选品，再由人工登记公司协同表。商家发送标记与软件进度分别记录；在线表格永久只读。';
   document.querySelector('#reset').hidden=true;
   document.querySelector('.top-right').innerHTML='<span class="local-badge">仅本机 · 独立存储</span>';
-  document.querySelector('.heading-controls').innerHTML=`<label for="workspace-mode">工作空间</label><select id="workspace-mode"><option value="local">本机持久化</option><option value="demo">虚构演示</option></select><button class="primary" id="local-import">${icon('plus')}导入本地副本</button>`;
+  document.querySelector('.heading-controls').innerHTML=`<a class="secondary" href="/selection.html">${icon('plus')}每日选品</a><label for="workspace-mode">工作空间</label><select id="workspace-mode"><option value="local">本机持久化</option><option value="demo">虚构演示</option></select><button class="primary" id="local-import">${icon('plus')}导入本地副本</button>`;
   // app.js owns mode switching and full reload.
   function notify(message) {const toast=document.querySelector('#toast');toast.textContent=message;toast.hidden=false;clearTimeout(notify.timer);notify.timer=setTimeout(()=>toast.hidden=true,5000);}
   async function refresh() {state=await provider.state();render();}

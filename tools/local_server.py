@@ -22,6 +22,7 @@ from control_console.materials import MaterialService
 from control_console.editing import EditingService
 from control_console.workbench import WorkbenchService
 from control_console.account_capture import AccountCaptureService
+from control_console.selection import SelectionService
 from tools.preview_server import resolve_request
 
 
@@ -55,7 +56,36 @@ class LocalHandler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == '/api/health':
-            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff','account-workbench','merchant-locks','local-reference-watch','account-capture']})
+            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff','account-workbench','merchant-locks','local-reference-watch','account-capture','daily-selection']})
+        elif path.startswith('/api/selection/'):
+            try:
+                query={k:v[0] for k,v in parse_qs(urlsplit(self.path).query).items()}
+                if path == '/api/selection/state':
+                    self.json_response(200,self.server.selection.state())
+                elif path == '/api/selection/products':
+                    query['showOther']=query.get('showOther')=='1'
+                    query['page']=int(query.get('page','1'))
+                    self.json_response(200,self.server.selection.catalog(query))
+                elif path == '/api/selection/product':
+                    self.json_response(200,self.server.selection.product(query.get('productId')))
+                elif path == '/api/selection/export':
+                    content=self.server.selection.export(query)
+                    self.send_response(200)
+                    self.send_header('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                    self.send_header('Content-Disposition','attachment; filename="daily-tasks.xlsx"')
+                    self.send_header('Content-Length',str(len(content)))
+                    self.send_header('Cache-Control','no-store')
+                    self.send_header('X-Content-Type-Options','nosniff')
+                    self.end_headers()
+                    self.wfile.write(content)
+                else:
+                    self.json_response(404,{'ok':False,'error':{'code':'route','message':'接口不存在。','details':[]}})
+            except ImportFailure as error:
+                self.json_response(422,{'ok':False,'error':error.as_dict()})
+            except (ValueError,TypeError,KeyError):
+                self.json_response(422,{'ok':False,'error':{'code':'selection_query','message':'选品筛选参数不合法，请重新选择日期或账号。','details':[]}})
+            except (OSError,sqlite3.Error):
+                self.json_response(500,{'ok':False,'error':{'code':'storage','message':'本地选品数据暂时不可读，请检查运行目录后重试。','details':[]}})
         elif path == '/api/state':
             state=self.server.store.state()
             material=self.server.material.state()
@@ -170,7 +200,16 @@ class LocalHandler(BaseHTTPRequestHandler):
                 else:
                     result = self.server.store.commit_import(body.get('kind'),filename,content,body.get('options'))
             elif path == '/api/reference/register':
-                result = self.server.workbench.register(body.get('kind'),body.get('path'))
+                result = self.server.workbench.register(body.get('kind'),body.get('path'),body.get('options'))
+            elif path.startswith('/api/selection/'):
+                operation={'add':'add','update':'update','remove':'remove','target':'target','preset':'preset','apply-preset':'apply_preset','preview':'preview','generate':'generate'}.get(path.removeprefix('/api/selection/'))
+                if operation is None:
+                    self.json_response(404,{'ok':False,'error':{'code':'route','message':'接口不存在。','details':[]}})
+                    return
+                for field in ('accountId','productId','draftId','presetId','id','editId','token'):
+                    if field in body and (not isinstance(body[field],str) or not body[field] or len(body[field])>1000):
+                        raise ImportFailure('selection_request','请选择有效的账号、来源记录或草稿，再重试。')
+                result=getattr(self.server.selection,operation)(body)
             elif path == '/api/reference/refresh':
                 result = self.server.workbench.refresh_sources(force=True)
             elif path == '/api/accounts/verify':
@@ -227,6 +266,7 @@ def create_server(port, runtime_dir):
         server.editing = EditingService(server.store,server.material)
         server.workbench = WorkbenchService(server.store)
         server.accounts = AccountCaptureService(server.store,server.workbench)
+        server.selection = SelectionService(server.store,server.workbench)
         server.token = secrets.token_urlsafe(32)
         return server
     except Exception:

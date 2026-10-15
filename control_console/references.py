@@ -7,6 +7,7 @@ import posixpath
 import re
 import zipfile
 from datetime import date, datetime
+from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
 from .importers import ImportFailure, HEADERS, NS, RID, _text, _date, identifier_issue, col_index
 
@@ -118,17 +119,72 @@ def images(p, sheet_path, root):
                     output.setdefault(row, {'member':member, 'mime':mime, 'row':row, 'column':'F'})
     return output
 
-def _parse(p, kind):
+def product_links(p, sheet_path, root):
+    """Read hyperlink targets as data only, through the same bounded XML reader."""
+    rel_name = posixpath.join(posixpath.dirname(sheet_path), '_rels', posixpath.basename(sheet_path) + '.rels')
+    targets = {}
+    seen = set()
+    if rel_name in p.names:
+        for node in p.xml(rel_name):
+            key = node.get('Id')
+            if key in seen:
+                raise ImportFailure('xlsx_invalid', '关系ID重复。')
+            seen.add(key)
+            target = node.get('Target', '')
+            if (node.get('TargetMode') == 'External'
+                    and node.get('Type', '').endswith('/hyperlink')
+                    and safe_product_url(target)):
+                targets[key] = target
+    return {node.get('ref'): targets[node.get(RID)]
+            for node in root.findall('s:hyperlinks/s:hyperlink', NS)
+            if node.get(RID) in targets}
+
+def safe_product_url(value):
+    try:
+        url = urlsplit(value)
+        return url.scheme.lower() in ('http', 'https') and bool(url.netloc) and not any(ord(c) < 32 for c in value)
+    except ValueError:
+        return False
+
+def statistic_date(cell, epoch, year):
+    raw = cell['text'].strip()
+    needs_year = False
+    try:
+        if cell['type'] == 'number' and raw and cell.get('dateStyle'):
+            return _date(cell['raw'], epoch).split('T', 1)[0], False
+        if cell['type'] not in ('string', 'date') or not raw:
+            return '', False
+        full = re.fullmatch(r'(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?', raw)
+        if full:
+            return date(*(int(v) for v in full.groups())).isoformat(), False
+        short = re.fullmatch(r'(\d{1,2})[-/.月](\d{1,2})日?', raw)
+        if short:
+            needs_year = year is None
+            # Leap-year validation without inferring a source year.
+            parsed = date(year if year is not None else 2000, *(int(v) for v in short.groups()))
+            return (parsed.isoformat() if year is not None else ''), needs_year
+        if cell['type'] == 'date':
+            return datetime.fromisoformat(raw).date().isoformat(), False
+    except (ValueError, ArithmeticError):
+        pass
+    return '', needs_year
+
+def _parse(p, kind, source_options):
     book = p.xml('xl/workbook.xml')
     rels = p.rels('xl/workbook.xml')
     epoch = book.find('s:workbookPr', NS)
     epoch = epoch is not None and epoch.get('date1904') in ('1', 'true')
     shared = list(p.xml('xl/sharedStrings.xml')) if 'xl/sharedStrings.xml' in p.names else []
-    font_colors, styles = [], []
+    font_colors, styles, date_styles = [], [], []
     if 'xl/styles.xml' in p.names:
         style = p.xml('xl/styles.xml')
         font_colors = [purple(f.find('s:color', NS)) for f in style.findall('s:fonts/s:font', NS)]
         styles = [int(x.get('fontId', '0')) for x in style.findall('s:cellXfs/s:xf', NS)]
+        custom_formats = {int(x.get('numFmtId')): x.get('formatCode', '') for x in style.findall('s:numFmts/s:numFmt', NS)}
+        for xf in style.findall('s:cellXfs/s:xf', NS):
+            number_format = int(xf.get('numFmtId', '0'))
+            code = re.sub(r'"[^"]*"|\\.|\[[^\]]*\]', '', custom_formats.get(number_format, '')).lower()
+            date_styles.append(number_format in set(range(14, 23)) | set(range(27, 37)) | set(range(50, 59)) or bool(re.search(r'[yd]', code)))
     records, issues, mappings = [], [], []
     skipped = 0
     sheet_names = set()
@@ -141,8 +197,6 @@ def _parse(p, kind):
         if not name or name in sheet_names:
             raise ImportFailure('xlsx_invalid', '工作表名称缺失或重复。')
         sheet_names.add(name)
-        if kind == 'products' and name not in MAIN + TAGS:
-            continue
         target = rels.get(sheet.get(RID))
         if not target:
             raise ImportFailure('xlsx_invalid', '工作表关系缺失。')
@@ -184,7 +238,7 @@ def _parse(p, kind):
             style_idx = int(node.get('s', '0'))
             fid = styles[style_idx] if 0 <= style_idx < len(styles) else -1
             base = font_colors[fid] if 0 <= fid < len(font_colors) else False
-            cell = dict(text=value, type=ctype, value=raw, raw=raw, purple=visible_purple(rich, base) if rich is not None else bool(value.strip()) and base and ctype != 'formula')
+            cell = dict(text=value, type=ctype, value=raw, raw=raw, dateStyle=date_styles[style_idx] if 0 <= style_idx < len(date_styles) else False, purple=visible_purple(rich, base) if rich is not None else bool(value.strip()) and base and ctype != 'formula')
             cells[key] = cell
             if value.strip():
                 rows.add(row)
@@ -193,14 +247,23 @@ def _parse(p, kind):
         blank = dict(text='', type='blank', value='', purple=False)
         at = lambda r, c: cells.get((r,c), blank)
         if kind == 'products':
-            header = 3 if name == '母婴' else 1
+            verified_header = next((r for r in range(1, 51)
+                if all(at(r, col)['type'] == 'string' and at(r, col)['text'].strip() == text
+                       for col, text in (('E', '商品名称'), ('G', '商品ID'), ('H', '商品链接')))
+                and at(r, 'O')['type'] == 'string'
+                and at(r, 'O')['text'].strip() in ('企微群名称', '视频链接协同群', '企微群名称或视频链接协同群')), None)
+            header = verified_header or (3 if name == '母婴' else 1)
             pictures = images(p, target, root)
+            hyperlinks = product_links(p, target, root)
         else:
             header = next((r for r in range(1, 51) if [at(r, chr(65+i))['text'] for i in range(16)] == HEADERS), None)
             if header is None:
                 skipped += len(rows)
                 continue
-        mappings.append(dict(sheet=name, headerRow=header))
+        mapping = dict(sheet=name, headerRow=header)
+        if kind == 'products':
+            mapping['catalogVerified'] = verified_header is not None
+        mappings.append(mapping)
         extra_rows = {r for (r, c), cell in cells.items() if col_index(c) > 16 and cell['text'].strip()}
         for row in sorted(rows):
             if row <= header:
@@ -217,9 +280,14 @@ def _parse(p, kind):
                 errors.append(issue(row, name, 'identifier', problem or '商品ID必须为完整数字文本。'))
                 pid = ''
             if kind == 'products':
-                if any(at(row, col)['type'] in ('formula', 'error') for col in ('C','E','G','H','L')):
+                if any(at(row, chr(65+i))['type'] in ('formula', 'error') for i in range(16)):
                     errors.append(issue(row, name, 'formula', '商品行含公式或错误，不能用于可靠匹配。'))
-                record = dict(sheet=name, row=row, productId=pid, categories=[name] if name in MAIN else [], tags=[name] if name in TAGS else [], title=at(row,'E')['text'], group=at(row,'C')['text'], link=at(row,'H')['text'], requirement=at(row,'L')['text'], image=pictures.get(row), issues=errors)
+                link_text = at(row, 'H')['text']
+                link = hyperlinks.get(f'H{row}', link_text if safe_product_url(link_text) else '')
+                statistic, needs_year = statistic_date(at(row, 'A'), epoch, source_options.get('statisticYear'))
+                record = dict(sheet=name, row=row, productId=pid, categories=[name] if name in MAIN else [], tags=[] if name in MAIN else [name], title=at(row,'E')['text'], group=at(row,'C')['text'], groupC=at(row,'C')['text'], groupO=at(row,'O')['text'], link=link, linkText=link_text, requirement=at(row,'L')['text'], image=pictures.get(row), issues=errors,
+                    statisticDate=statistic, statisticDateRaw=at(row,'A')['text'], dateNeedsYear=needs_year, catalogVerified=verified_header is not None,
+                    **{key: at(row, col)['text'] for key, col in (('progress','B'), ('investment','D'), ('commission','I'), ('totalSales','J'), ('dailySales','K'), ('responsible','M'), ('settlement','N'), ('assistant','P'))})
             else:
                 if row in extra_rows:
                     errors.append(issue(row, name, 'extra_column', '协同业务行P列后包含额外业务值，不能可靠关联。'))
@@ -254,6 +322,8 @@ def _parse(p, kind):
         raise ImportFailure('no_rows', '来源没有可识别的业务行。')
     options = dict(sheets=mappings, skippedRows=skipped, adapterVersion='006A.1')
     if kind == 'products':
+        options['adapterVersion'] = '006A3.1'
+        options['statisticYear'] = source_options.get('statisticYear')
         options['mainCategories'] = list(MAIN)
         options['complete'] = all(n in sheet_names for n in MAIN)
     elif len(mappings) == 1:
@@ -263,13 +333,19 @@ def _parse(p, kind):
         digest.update(name.encode() + b'\0' + value.encode() + b'\n')
     return dict(sha256=digest.hexdigest(), records=records, options=options, issues=issues, filename=p.path.name)
 
-def parse_reference(path, kind):
+def parse_reference(path, kind, options=None):
     if kind not in ('products', 'collaboration'):
         raise ImportFailure('kind', '只支持商品库和协同参考。')
     p = None
     try:
+        if options is not None and not isinstance(options, dict):
+            raise ImportFailure('options', '来源设置必须为对象。')
+        source_options = options or {}
+        year = source_options.get('statisticYear')
+        if year is not None and (type(year) is not int or not 2000 <= year <= 2100):
+            raise ImportFailure('statistic_year', '统计年份须为2000至2100整数。')
         p = Package(path)
-        return _parse(p, kind)
+        return _parse(p, kind, source_options)
     except ImportFailure:
         raise
     except (OSError, ValueError, KeyError, ET.ParseError, zipfile.BadZipFile, RuntimeError, OverflowError) as error:
@@ -286,7 +362,7 @@ def read_product_image(path, member):
         rels = p.rels('xl/workbook.xml')
         allowed = {}
         for sheet in book.findall('s:sheets/s:sheet', NS):
-            if sheet.get('name') in MAIN + TAGS:
+            if sheet.get('name'):
                 target = rels.get(sheet.get(RID))
                 if target:
                     for img in images(p, target, p.xml(target)).values():

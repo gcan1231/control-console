@@ -17,7 +17,7 @@ export class LocalProvider {
   inspect(file) { return this.request('/api/inspect',file); }
   async preview(file) { const result=await this.request(file.kind==='tasks'?'/api/tasks/import/preview':'/api/import/preview',file);if(file.kind==='tasks')this.revisionToken=result.revisionToken;return result; }
   commit(file) { return this.request(file.kind==='tasks'?'/api/tasks/import/commit':'/api/import/commit',file.kind==='tasks'?{...file,revisionToken:this.revisionToken}:file); }
-  registerReference(kind,path) { return this.request('/api/reference/register',{kind,path}); }
+  registerReference(kind,path,options) { return this.request('/api/reference/register',{kind,path,...(options===undefined?{}:{options})}); }
   refreshReferences() { return this.request('/api/reference/refresh',{}); }
   previewAccounts(payload) { return this.request('/api/account-captures/preview',payload); }
   accountCapture(id) { return this.request('/api/account-captures/draft?captureId='+encodeURIComponent(id)); }
