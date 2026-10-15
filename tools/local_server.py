@@ -23,6 +23,7 @@ from control_console.editing import EditingService
 from control_console.workbench import WorkbenchService
 from control_console.account_capture import AccountCaptureService
 from control_console.selection import SelectionService
+from control_console.logs import LogService
 from tools.preview_server import resolve_request
 
 
@@ -56,7 +57,16 @@ class LocalHandler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == '/api/health':
-            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff','account-workbench','merchant-locks','local-reference-watch','account-capture','daily-selection']})
+            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff','account-workbench','merchant-locks','local-reference-watch','account-capture','daily-selection','log-center']})
+        elif path in ('/api/logs/state','/api/logs/summary'):
+            try:
+                query={k:v[0] for k,v in parse_qs(urlsplit(self.path).query).items()}
+                result=self.server.logs.summary([query['taskId']] if query.get('taskId') else None) if path.endswith('/summary') else self.server.logs.state(query)
+                self.json_response(200,result)
+            except (ImportFailure,ValueError,TypeError) as error:
+                self.json_response(422,{'ok':False,'error':error.as_dict() if isinstance(error,ImportFailure) else {'code':'logs_query','message':'请检查日志筛选条件。','details':[]}})
+            except (OSError,sqlite3.Error):
+                self.json_response(500,{'ok':False,'error':{'code':'logs_storage','message':'日志副本暂不可读，请检查运行目录。','details':[]}})
         elif path.startswith('/api/selection/'):
             try:
                 query={k:v[0] for k,v in parse_qs(urlsplit(self.path).query).items()}
@@ -199,6 +209,10 @@ class LocalHandler(BaseHTTPRequestHandler):
                     result = self.server.store.preview_import(body.get('kind'),filename,content,body.get('options'))
                 else:
                     result = self.server.store.commit_import(body.get('kind'),filename,content,body.get('options'))
+            elif path == '/api/logs/configure':
+                result = self.server.logs.configure(body)
+            elif path == '/api/logs/poll':
+                result = self.server.logs.poll()
             elif path == '/api/reference/register':
                 result = self.server.workbench.register(body.get('kind'),body.get('path'),body.get('options'))
             elif path.startswith('/api/selection/'):
@@ -267,6 +281,7 @@ def create_server(port, runtime_dir):
         server.workbench = WorkbenchService(server.store)
         server.accounts = AccountCaptureService(server.store,server.workbench)
         server.selection = SelectionService(server.store,server.workbench)
+        server.logs = LogService(runtime_dir, trusted_task_ids=lambda: {t['id'] for t in server.store.state()['tasks']})
         server.token = secrets.token_urlsafe(32)
         return server
     except Exception:
@@ -303,6 +318,14 @@ def main():
                 continue
     watcher=threading.Thread(target=monitor,name='local-reference-watch',daemon=True)
     watcher.start()
+    def monitor_logs():
+        while not stop.wait(3):
+            try:
+                server.logs.poll()
+            except (ImportFailure,OSError,sqlite3.Error,ValueError):
+                # Log collection cannot initiate work or change business results.
+                continue
+    threading.Thread(target=monitor_logs,name='local-log-watch',daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
