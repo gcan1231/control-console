@@ -102,7 +102,7 @@ class LogTests(unittest.TestCase):
         source = self.service.configure(dict(software='material', path=str(self.log)))['source']
         self.assertEqual(self.service.poll()['sources'][0]['status'], 'disabled')
         source = self.configure(encoding='utf-16')
-        self.assertEqual(self.service.poll()['sources'][-1]['status'], 'error')
+        self.assertEqual(self.service.poll()['sources'][-1]['status'], 'waiting_file')
         self.log.write_bytes(b'no bom\n')
         self.assertEqual(self.service.poll()['sources'][-1]['status'], 'error')
         self.service.configure({'id': source['id'], 'delete': True})

@@ -12,7 +12,7 @@ function url(){const q=new URLSearchParams(Object.entries(filters).filter(([,v])
 function time(value){const d=new Date(value);return Number.isNaN(d.getTime())?String(value||'时间未提供'):new Intl.DateTimeFormat('zh-CN',{dateStyle:'short',timeStyle:'medium'}).format(d);}
 function sources(){
  const focused=document.activeElement?.closest('[data-source]')?.dataset.source;
- $('#logs-sources').innerHTML=Object.entries(names).map(([key,name])=>{const found=state.sources.filter(s=>s.software===key);return `<article class="logs-source"><h3>${name}</h3>${found.length?found.map(s=>`<p><strong>${e(s.label)}</strong> · ${s.enabled?'已启用':'已停用'}${s.status?' · '+e(({waiting:'等待读取',disabled:'已停用',ok:'读取正常',limited:'分批读取',error:'读取失败'})[s.status]||s.status):''}</p><p>${e(s.error||s.lastReadAt&&'最近读取：'+time(s.lastReadAt)||'等待读取')}</p><button type="button" class="secondary" data-source="${e(s.id)}">查看 / 修改来源</button>`).join(''):'<p>尚未配置已确认的日志文件</p>'}</article>`;}).join('');
+ $('#logs-sources').innerHTML=Object.entries(names).map(([key,name])=>{const found=state.sources.filter(s=>s.software===key);return `<article class="logs-source"><h3>${name}</h3>${found.length?found.map(s=>`<p><strong>${e(s.label)}</strong> · ${s.enabled?'已启用':'已停用'}${s.status?' · '+e(({waiting:'等待读取',waiting_file:'等待日志文件',disabled:'已停用',ok:'读取正常',limited:'分批读取',error:'读取失败'})[s.status]||s.status):''}</p><p>${e(s.error||s.note||s.lastReadAt&&'最近读取：'+time(s.lastReadAt)||'等待读取')}</p><button type="button" class="secondary" data-source="${e(s.id)}">查看 / 修改来源</button>`).join(''):'<p>尚未配置已确认的日志文件</p>'}</article>`;}).join('');
  if(focused)$('#logs-sources').querySelector(`[data-source="${CSS.escape(focused)}"]`)?.focus({preventScroll:true});
 }
 function rows(){

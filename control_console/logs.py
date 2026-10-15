@@ -81,7 +81,7 @@ class LogService:
                 raise ImportFailure('log_config', '名称或启用参数无效')
             if not body.get('label', software).strip():
                 raise ImportFailure('log_config', '日志来源名称不能为空')
-            source = dict(id=sid, software=software, label=body.get('label', software)[:200], path=str(Path(path)), encoding=encoding, rotationGlob=pattern, enabled=body.get('enabled', False), status='waiting' if body.get('enabled', False) else 'disabled', error='', lastReadAt=None)
+            source = dict(id=sid, software=software, label=body.get('label', software)[:200], path=str(Path(path)), encoding=encoding, rotationGlob=pattern, enabled=body.get('enabled', False), status='waiting' if body.get('enabled', False) else 'disabled', error='', note='', lastReadAt=None)
             db.execute('INSERT OR REPLACE INTO sources VALUES (?,?)', (sid, json.dumps(source)))
         return {'ok': True, 'source': source}
 
@@ -95,8 +95,10 @@ class LogService:
                 source = json.loads(raw)
                 if not source['enabled']:
                     continue
-                source.update(status='ok', error='')
+                source.update(status='ok', error='', note='')
                 try:
+                    read_any = False
+                    missing = False
                     base = Path(source['path'])
                     files = [base]
                     if source['rotationGlob']:
@@ -113,11 +115,23 @@ class LogService:
                         if budget <= 0:
                             source.update(status='limited', error='单轮读取预算已用完，下一轮继续')
                             break
-                        used, limited = self._read(db, source, file, min(budget, self.MAX_BYTES), cutoff, trusted)
+                        try:
+                            used, limited = self._read(db, source, file, min(budget, self.MAX_BYTES), cutoff, trusted)
+                        except FileNotFoundError:
+                            # A log may not exist until normal software use, or
+                            # may disappear during rotation. Never create it.
+                            missing = True
+                            continue
+                        read_any = True
                         budget -= used
                         if limited:
                             source.update(status='limited', error='达到每文件字节或行数上限，下一轮继续；超长未完整行暂不导入')
-                    source['lastReadAt'] = self._now()
+                    if read_any:
+                        source['lastReadAt'] = self._now()
+                    if missing:
+                        source['note'] = '等待日志文件；文件生成后将自动只读采集，已有轮转日志仍保留。'
+                        if source['status'] == 'ok':
+                            source['status'] = 'waiting_file'
                 except (OSError, ValueError, UnicodeError) as exc:
                     source.update(status='error', error=str(exc)[:500])
                 db.execute('UPDATE sources SET body=? WHERE id=?', (json.dumps(source), sid))
