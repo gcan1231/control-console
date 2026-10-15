@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/demo.test.mjs",
+    "test:unit": "node --test tests/demo.test.mjs tests/account_capture_ui.test.mjs tests/selection_demo.test.mjs tests/workbench.test.mjs",
+    "test:single-machine": "python -B tools/run_single_machine_checks.py",
     "start": "python tools/local_server.py",
     "demo": "python tools/preview_server.py",
     "test:local": "python -m unittest discover -s tests -p test_local_import.py",

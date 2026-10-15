@@ -63,6 +63,8 @@ python tools/preview_server.py
 
 ## 日常使用
 
+完整单机测试入口为`npm run test:single-machine`，或`python -B tools/run_single_machine_checks.py`。仅用虚构数据和独立临时服务，不操作正式工作区；测试报告保存在被Git忽略的test-results。依赖设置、逐模块结果及人工实机验证边界见[单机自动化完整验收](docs/单机自动化完整验收-007.md)。
+
 ```powershell
 # 查看修改
 git status
