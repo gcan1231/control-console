@@ -237,11 +237,11 @@ class _Publisher:
             await self.action(self.page.get_by_role("button", name="选择横封面", exact=True), "click")
             await self.action(self.page.get_by_role("button", name="完成", exact=True), "click")
 
-    async def action(self, locator, method, *args):
+    async def action(self, locator, method, *args, **kwargs):
         self.checkpoint("checking")
         await _one(locator, "必要控件")
         try:
-            await getattr(locator, method)(*args, timeout=5000)
+            await getattr(locator, method)(*args, timeout=5000, **kwargs)
         except Exception as exc:
             raise BrowserFailure("页面操作失败，已停止且不会自动重提") from exc
         self.checkpoint("checking")
@@ -307,7 +307,7 @@ class _Publisher:
             for key, label in (("dailyBudget", "日预算"), ("roi", "支付ROI目标")):
                 await self.field(label, parameters[key])
             for key, label in (("bidStrategy", "出价方式"), ("target", "投放目标"), ("placement", "投放位置")):
-                await self.action(self.page.get_by_label(label, exact=True), "select_option", {"label": parameters[key]})
+                await self.action(self.page.get_by_label(label, exact=True), "select_option", label=parameters[key])
                 selected = self.page.get_by_label(label, exact=True).locator("option:checked")
                 if (await selected.inner_text()).strip() != parameters[key]:
                     raise BrowserFailure("未确认千川选择值：" + label)
