@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {pathToFileURL} from 'node:url';
+import {resolve} from 'node:path';
+import {mkdir,writeFile} from 'node:fs/promises';
+const require=createRequire(import.meta.url);let pw;try{pw=require('playwright');}catch{pw=require(process.env.PLAYWRIGHT_MODULE);}
+const out='test-results/theme-preview',errors=[],requests=[],writes=[];let browser;const checks=[];
+try{
+ await mkdir(out,{recursive:true});execFileSync(process.env.PYTHON||'python',['tools/export_theme_preview.py'],{stdio:'pipe'});browser=await pw.chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||'chrome'});const page=await browser.newPage({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+ const url=pathToFileURL(resolve('dist/总控制台-五种风格预览.html')).href;
+ await page.exposeFunction('recordWrite',v=>writes.push(v));await page.addInitScript(()=>{for(const m of ['setItem','removeItem','clear'])Storage.prototype[m]=function(){window.recordWrite(m);throw Error('Persistent storage forbidden');};indexedDB.open=function(){window.recordWrite('indexedDB');throw Error('Persistent storage forbidden');};});
+ page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',async r=>{if(r.request().url()===url&&r.request().isNavigationRequest())return r.continue();requests.push(r.request().url());return r.abort();});
+ await page.goto(url);for(const theme of ['A','B','C','D','E']){await page.locator(`[data-theme-pick=${theme}]`).click();assert.equal(await page.locator('html').getAttribute('data-theme'),theme);for(const view of ['components','selection','discovery','intake']){await page.locator(`[data-view=${view}]`).click();assert.equal(await page.locator(`[data-view=${view}]`).getAttribute('aria-pressed'),'true');}}
+ await page.locator('[data-view=selection]').click();await page.locator('[data-account=demo-food]').click();await page.locator('[data-add="9000000000000000001"]').click();assert.match(await page.locator('#draft-list').innerText(),/9000000000000000001/);assert.equal(await page.locator('dialog[open]').count(),0);await page.locator('#preview-message').waitFor({state:'hidden'});await page.screenshot({path:`${out}/offline.png`,fullPage:true});
+ assert.deepEqual({errors,requests,writes},{errors:[],requests:[],writes:[]});checks.push('file:// standalone: five themes × four views; historical product direct add; no additional resources, API, persistence or page errors');await writeFile(`${out}/offline-report.json`,JSON.stringify({ok:true,checks,errors,requests,writes},null,2));console.log(JSON.stringify({ok:true,checks},null,2));
+}catch(e){await mkdir(out,{recursive:true});const report={ok:false,checks,errors,requests,writes,error:e.stack};await writeFile(`${out}/offline-report.json`,JSON.stringify(report,null,2));console.error(JSON.stringify(report,null,2));process.exitCode=1;}finally{await browser?.close();}

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="A">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light"><meta name="theme-color" content="#f7f8fa">
+  <title>五种界面风格 · 总控制台</title>
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/theme-preview.css">
+</head>
+<body>
+  <a class="skip" href="#preview-main">跳到主内容</a>
+  <header class="compare-bar">
+    <div class="compare-heading"><div><strong>界面方案对照</strong><span>五种风格，同一套任务</span></div><a href="/">返回正式工作台</a></div>
+    <nav id="theme-picker" aria-label="选择界面风格"></nav>
+    <div class="compare-meta"><span id="theme-description"></span><span><a id="theme-source" target="_blank" rel="noreferrer">设计参考</a><button type="button" id="reset-preview">重置预览</button></span></div>
+  </header>
+  <div class="app-shell">
+    <aside class="app-nav">
+      <div class="brand"><span class="brand-symbol" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 10 6-10 6L2 9l10-6Zm-9 11 9 5 9-5M3 18l9 5 9-5"/></svg></span><div>总控制台<small>运营工作台</small></div></div>
+      <p class="nav-label">工作空间</p><nav id="view-picker" aria-label="预览页面"></nav>
+      <div class="nav-bottom"><span class="badge info">界面选版</span><p>虚构数据，仅本页预览。<br>不读取文件，不连接软件。</p><div class="nav-reference">布局、控件与状态均可比较</div></div>
+    </aside>
+    <main id="preview-main" tabindex="-1">
+      <div class="workspace-line"><span>本地工作空间 <span aria-hidden="true">/</span> <span id="breadcrumb">每日选品</span></span><span>演示运营甲 <span class="avatar" aria-hidden="true">演</span></span></div>
+      <div class="page-heading"><div><h1 id="page-title">每日选品</h1><p id="page-subtitle"></p></div><label class="scenario-label">预览状态<select id="sample-state" name="sampleState"><option value="normal">正常内容</option><option value="loading">正在处理</option><option value="empty">空状态</option><option value="error">失败状态</option></select></label></div>
+      <div id="sample-feedback"></div>
+      <section id="preview-content" aria-label="页面预览"></section>
+      <footer class="workspace-footer">样式确认后再统一正式页面。当前操作只保存在页面内存，刷新恢复初始状态。</footer>
+    </main>
+  </div>
+  <div id="preview-message" role="status" aria-live="polite" aria-atomic="true"></div>
+  <dialog id="preview-dialog" aria-labelledby="dialog-title"><div class="dialog-heading"><h2 id="dialog-title">草稿核对</h2><button id="close-dialog" type="button" class="icon-button" aria-label="关闭核对窗口">×</button></div><div id="dialog-content"></div><div class="dialog-footer"><button type="button" id="dialog-done" class="button primary">返回预览</button></div></dialog>
+  <script type="module" src="/modules/theme-preview.js"></script>
+</body>
+</html>
