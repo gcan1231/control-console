@@ -1,0 +1,24 @@
+/* Final selected A graphite palette. Load after each existing page stylesheet.
+   Layout and semantic status colors remain owned by their original modules. */
+:root{--bg:#f8fafc;--surface:#fff;--ink:#0f172a;--muted:#475569;--line:#dce3eb;--soft:#f1f5f9;--primary:#1e293b;--radius:6px;--sel-bg:#f8fafc;--sel-surface:#fff;--sel-text:#0f172a;--sel-muted:#475569;--sel-border:#dce3eb;--sel-primary:#1e293b;--border:#dce3eb;--background:#f8fafc;--foreground:#0f172a;color-scheme:light}
+.wb{--wb-bg:#f8fafc;--wb-panel:#fff;--wb-text:#0f172a;--wb-muted:#475569;--wb-line:#dce3eb;--wb-primary:#1e293b}.wbs{--wbs-line:#dce3eb}.px{--px-border:#dce3eb}.ac{--ac-focus:#1e293b}
+body{background:#f8fafc;color:#0f172a;font:14px/1.5 'Microsoft YaHei','PingFang SC','Segoe UI',sans-serif}
+.sidebar,main,.sel-center,.sel-panel{min-width:0}
+.sidebar nav :is(a,button).active,.sidebar nav [aria-current=page]{background:#f1f5f9;color:#1e293b;font-weight:600}
+.sidebar nav a:hover{background:#f8fafc;color:#1e293b}
+.primary,.sel-primary,#selection-dialog button.sel-primary{background:#1e293b;border-color:#1e293b;color:#fff}
+.primary:hover:not(:disabled),.sel-primary:hover:not(:disabled){background:#334155;border-color:#334155}
+:is(.panel,.stats,.wb-group,.wb-filters,.wb-confirm,.wbs-card,.px form,.px-run,.px-empty,.ac-row,.ac-account-nav,.ac-paste-zone,.ac-text-entry,.sel-panel,.sel-global-controls,#selection-dialog,#pub-dialog){border-radius:6px}
+.segmented button.selected,.sel-variant-button.sel-active,.drawer,#toast,.sel-toast{box-shadow:none}
+.drawer{border-left:1px solid #dce3eb}
+.sel-account.sel-active{background:#f1f5f9;border-color:#cbd5e1;box-shadow:inset 3px 0 0 #1e293b}
+.sel-table tr:hover td{background:#f8fafc}
+:is(button,a,input,select,textarea,summary,[tabindex]):focus-visible,.px :is(button,input,textarea,select,a):focus-visible,.pub-page :focus-visible,.sel-app :focus-visible,#selection-dialog :focus-visible{outline:2px solid #1e293b;outline-offset:3px}
+.search-box:focus-within{outline:2px solid #1e293b;outline-offset:2px}.search-box input:focus-visible{outline:none}
+input[type=checkbox],input[type=radio]{accent-color:#1e293b}
+:is(.table-scroll,.wb-scroll,.pub-table-scroll,.px-table,.sel-table-scroll,.sel-scroll){max-width:100%;overflow:auto;overscroll-behavior-inline:contain}
+:is(.local-id,.product-id,.wb-id,.sel-id){font-size:12px;font-variant-numeric:tabular-nums}.wb-id,.sel-id{overflow-wrap:anywhere}
+:is(small,.pub-muted,.sel-muted){font-size:12px}
+/* Business status hues deliberately remain blue/amber/red/purple. */
+.badge.blue{color:#1d4ed8;background:#eff6ff;border-color:#bfdbfe}.badge.amber{color:#92400e;background:#fffbeb;border-color:#fde68a}.badge.danger{color:#b91c1c;background:#fef2f2;border-color:#fecaca}.badge.purple,.wb-lock{color:#6b21a8;background:#f3e8ff}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;scroll-behavior:auto!important}}

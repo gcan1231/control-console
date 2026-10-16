@@ -78,6 +78,9 @@ class MaterialService:
             self.store._revalidate(conn)
             tasks=[]
             for task_id in task_ids:
+                from .external_intake import _record
+                if _record(conn,task_id,'materials') or _record(conn,task_id,'finished'):
+                    raise ImportFailure('material_gate','任务已人工接纳外部成果，请从相应后续阶段继续，不能重新采集。')
                 row=conn.execute('SELECT * FROM tasks WHERE id=?',(task_id,)).fetchone()
                 if not row or row['archived'] or not json.loads(row['validation'])['ok'] or row['stage']=='reported':
                     raise ImportFailure('material_gate','所有任务必须通过最新品类/重复行校验，且来源无发布回执。')

@@ -69,10 +69,33 @@ def main():
         output = run([os.environ.get('COMSPEC', 'cmd.exe'), '/d', '/c', str(package / 'Start.cmd'), '--check'])
         assert '"ok": true' in output and '"isolated": true' in output, output
         check('Start.cmd --check with poisoned environment', output.strip())
-        inspected = json.loads(py("import sys,json,sqlite3,ssl,ctypes,PIL,greenlet,playwright; print(json.dumps({'paths':sys.path,'modules':{m.__name__:m.__file__ for m in (sqlite3,ssl,ctypes,PIL,greenlet,playwright)},'isolated':sys.flags.isolated}))"))
+        inspected = json.loads(py("import sys,json,sqlite3,ssl,ctypes,PIL,greenlet,playwright; import control_console.discovery as discovery; import control_console.external_intake as external_intake; print(json.dumps({'paths':sys.path,'modules':{m.__name__:m.__file__ for m in (sqlite3,ssl,ctypes,PIL,greenlet,playwright,discovery,external_intake)},'isolated':sys.flags.isolated}))"))
         assert inspected['isolated']
         for path in inspected['paths'] + list(inspected['modules'].values()):
             assert Path(path).resolve().is_relative_to(package.resolve()), path
+        # Exercise only argument construction under the poisoned PATH. The stub
+        # never opens a dialog or starts PowerShell, and discovery.scan is unused.
+        picker = json.loads(py("""import json,os
+from pathlib import Path
+from types import SimpleNamespace
+from control_console import discovery
+calls=[]
+original=discovery.subprocess.run
+def capture(*args,**kwargs):
+    calls.append(args[0])
+    return SimpleNamespace(stdout='')
+discovery.subprocess.run=capture
+try:
+    assert discovery.choose_local_path('directory') == ''
+    assert discovery.choose_local_path('taskWorkbook') == ''
+finally:
+    discovery.subprocess.run=original
+expected=Path(os.environ.get('SystemRoot',r'C:\\Windows'))/'System32'/'WindowsPowerShell'/'v1.0'/'powershell.exe'
+assert expected.is_absolute() and expected.is_file()
+assert len(calls)==2 and all(Path(call[0])==expected and '-STA' in call and '-WindowStyle' in call and 'Hidden' in call for call in calls)
+print(json.dumps({'powershell':str(expected),'mockedPickerCalls':len(calls)}))
+"""))
+        inspected['picker'] = picker
         check('runtime paths and dependencies confined to extracted package', inspected)
         run([str(python), '-I', '-B', '-m', 'tools.publisher_worker', '--help'])
         check('independent bundled worker help')
@@ -102,8 +125,11 @@ def main():
 
         process, token = start()
         module = next((package / 'app/demo/modules').glob('*.js')).name
-        for route in ('/', '/app.js', '/modules/' + module, '/diagrams/architecture.html', '/diagrams/workflow.html'):
+        for route in ('/', '/app.js', '/modules/' + module, '/external.html', '/external.css', '/graphite.css', '/modules/external-workspace.js', '/diagrams/architecture.html', '/diagrams/workflow.html'):
             assert len(request(route)) > 100, route
+        external = request('/api/external/state')
+        assert external.get('ok') is True and isinstance(external.get('externalTasks'), dict), external
+        assert not external['externalTasks'], external
         check('HTTP application and bundled diagrams available', {'port': port})
         spec = importlib.util.spec_from_file_location('portable_fictional_fixture', ROOT / 'tests/test_local_import.py')
         fixture = importlib.util.module_from_spec(spec); spec.loader.exec_module(fixture)

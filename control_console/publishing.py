@@ -12,6 +12,7 @@ from .importers import ImportFailure, parse_import, read_workbook, MAX_BYTES
 from .materials import safe_component
 from .store import dump, now
 from .workbooks import task_workbook
+from .external_intake import external_videos
 
 
 class PublishingService:
@@ -47,6 +48,8 @@ class PublishingService:
         return target
 
     def _evidence(self, conn, task_id, kinds):
+        external=external_videos(conn,task_id,kinds,self.editing)
+        if external:return external
         _,fields,_=self.editing._gate(conn,task_id)
         record=None
         for kind in kinds:

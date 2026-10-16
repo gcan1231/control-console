@@ -1,10 +1,10 @@
 // 独立风格预览专用虚构数据；不读取账号、商品快照或业务文件。
 export const THEMES = [
-  { id: 'A', name: '图片货架', subtitle: '看图挑选，草稿随收随放', source: 'Shadcn Admin', description: '横向切换账号，浏览图片货架，在底部展开今日草稿。' },
-  { id: 'B', name: '表格批量', subtitle: '整表比较，批量加入草稿', source: 'Ant', description: '窄侧导航与全宽数据表，勾选多件后一次加入草稿。' },
-  { id: 'C', name: '上下工作区', subtitle: '上方找商品，下方核对草稿', source: 'Tabler', description: '左侧固定账号，上下同时查看商品与草稿，可调整工作区比例。' },
-  { id: 'D', name: '分步向导', subtitle: '选账号、挑商品、核对草稿', source: 'Fluent', description: '一次专注一个步骤，完成账号选择后挑选商品，再核对草稿。' },
-  { id: 'E', name: '快速检视', subtitle: '左侧浏览，右侧查看详情', source: 'Carbon', description: '深色导航，左侧商品索引与右侧详情联动，逐件快速检视。' },
+  { id: 'A', name: '石墨极简', subtitle: '清晰克制 · 聚焦任务', source: 'Shadcn Admin', description: '石墨色主操作、细边框与清晰表格层级。' },
+  { id: 'B', name: '蓝白专业', subtitle: '明确反馈 · 稳定秩序', source: 'Ant', description: '蓝色主操作、紧凑分组与明确的状态反馈。' },
+  { id: 'C', name: '青绿轻量', subtitle: '轻盈留白 · 快速浏览', source: 'Tabler', description: '青绿色强调、轻量卡片与易浏览的信息密度。' },
+  { id: 'D', name: '靛蓝柔和', subtitle: '柔和层级 · 连贯操作', source: 'Fluent', description: '靛蓝色强调、柔和圆角与连贯的操作区域。' },
+  { id: 'E', name: '工业秩序', subtitle: '严谨网格 · 直接表达', source: 'Carbon', description: '方正网格、高对比信息与直接的操作表达。' },
 ];
 
 export const ACCOUNTS = [

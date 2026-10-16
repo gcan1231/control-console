@@ -26,6 +26,8 @@ from control_console.selection import SelectionService
 from control_console.logs import LogService
 from control_console.publishing import PublishingService
 from control_console.publisher_execution import PublishExecutionService
+from control_console.discovery import DiscoveryService, choose_local_path
+from control_console.external_intake import ExternalIntakeService
 from tools.preview_server import resolve_request
 
 
@@ -75,7 +77,12 @@ class LocalHandler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == '/api/health':
-            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff','account-workbench','merchant-locks','local-reference-watch','account-capture','daily-selection','log-center','manual-publishing']})
+            self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff','account-workbench','merchant-locks','local-reference-watch','account-capture','daily-selection','log-center','manual-publishing','external-intake','software-discovery','native-directory-picker']})
+        elif path == '/api/external/state':
+            try:
+                self.json_response(200, self.server.external.state())
+            except (OSError, sqlite3.Error):
+                self.json_response(500, {'ok':False,'error':{'code':'external_storage','message':'外部成果记录暂不可读，请检查运行目录。','details':[]}})
         elif path == '/api/publishing/execution/state':
             try:
                 self.json_response(200,self.server.publisher_execution.state())
@@ -86,8 +93,10 @@ class LocalHandler(BaseHTTPRequestHandler):
                 result=self.server.publishing.state()
                 tasks=self.server.store.state()['tasks']
                 editing=self.server.editing.state()['editingTasks']
+                external=self.server.external.state()['externalTasks']
                 for task in tasks:
                     task['editing']=editing.get(task['id'])
+                    task['external']=external.get(task['id'])
                 result['tasks']=tasks
                 self.json_response(200,result)
             except (OSError,sqlite3.Error):
@@ -140,6 +149,10 @@ class LocalHandler(BaseHTTPRequestHandler):
             for task in state['tasks']:
                 task['editing']=editing['editingTasks'].get(task['id'])
             state.update(editing)
+            external=self.server.external.state()
+            state.update(external)
+            for task in state['tasks']:
+                task['external']=external['externalTasks'].get(task['id'])
             state['accountCaptures']=self.server.accounts.list_drafts()
             self.json_response(200,self.server.workbench.enrich(state))
         elif path == '/api/account-captures/draft':
@@ -245,6 +258,17 @@ class LocalHandler(BaseHTTPRequestHandler):
                     result = self.server.store.preview_import(body.get('kind'),filename,content,body.get('options'))
                 else:
                     result = self.server.store.commit_import(body.get('kind'),filename,content,body.get('options'))
+            elif path == '/api/software/discover':
+                result = self.server.discovery.scan(body)
+            elif path == '/api/software/select':
+                result = self.server.discovery.select(body, self.server.material)
+            elif path == '/api/local/pick':
+                chosen = choose_local_path(body.get('kind','directory'))
+                result = {'ok':True,'path':chosen,'cancelled':not bool(chosen)}
+            elif path == '/api/external/preview':
+                result = self.server.external.preview(body)
+            elif path == '/api/external/accept':
+                result = self.server.external.accept(body)
             elif path.startswith('/api/publishing/execution/'):
                 operation=path.removeprefix('/api/publishing/execution/')
                 if operation not in ('probe','bind','template','start','control','reconcile'):
@@ -329,6 +353,8 @@ def create_server(port, runtime_dir):
         server.store = ConsoleStore(runtime_dir)
         server.material = MaterialService(server.store)
         server.editing = EditingService(server.store,server.material)
+        server.external = ExternalIntakeService(server.store,server.material,server.editing)
+        server.discovery = DiscoveryService(server.store)
         server.workbench = WorkbenchService(server.store)
         server.accounts = AccountCaptureService(server.store,server.workbench)
         server.selection = SelectionService(server.store,server.workbench)

@@ -1,7 +1,5 @@
 /* Five design studies share one fictional, memory-only provider. No business APIs. */
 import {THEMES, ACCOUNTS, PRODUCTS, HEADERS} from '../data/theme-preview-fixtures.js';
-import {createSelectionViews} from './theme-selection.js';
-import {composeWorkflow} from './theme-workflows.js';
 
 const $ = s => document.querySelector(s);
 const escape = v => String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -23,7 +21,7 @@ const icon = name => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="
 const badge = (text, type='', symbol) => `<span class="badge ${type}">${symbol?icon(symbol):''}${escape(text)}</span>`;
 const references = {A:'https://github.com/satnaing/shadcn-admin',B:'https://github.com/ant-design/ant-design',C:'https://github.com/tabler/tabler',D:'https://github.com/microsoft/fluentui',E:'https://github.com/carbon-design-system/carbon'};
 const views = {components:['组件样板','比较一整套控件、状态与操作层级。','grid'],selection:['每日选品','按账号选择商品，保存草稿，核对后再进入任务。','bag'],discovery:['软件识别','先找到软件，再核对连接；路径由系统辅助定位。','monitor'],intake:['外部成果接入','从已有素材或成片开始，不重做已经完成的工作。','folder']};
-const state = {batchIds:new Set(),inspected:'',step:1,splitRatio:'equal',drawerOpen:{},workflowSteps:{discovery:1,intake:1},workflowSelected:{discovery:0,intake:0},theme:'A',view:'selection',account:'demo-food',search:'',historyFilter:'all',sample:'normal',drafts:new Map(),discovery:{case:'found',ran:false,selected:'one',saved:false,chosen:false},intake:{kind:'finished',case:'complete',table:false,folder:false,scanned:false,verified:false,resolved:false,accepted:false}};
+const state = {theme:'A',view:'selection',account:'demo-food',search:'',historyFilter:'all',sample:'normal',drafts:new Map(),discovery:{case:'found',ran:false,selected:'one',saved:false,chosen:false},intake:{kind:'finished',case:'complete',table:false,folder:false,scanned:false,verified:false,resolved:false,accepted:false}};
 const provider = {
   accounts:()=>ACCOUNTS,
   account:()=>ACCOUNTS.find(a=>a.id===state.account),
@@ -42,11 +40,11 @@ function art(product){
 }
 function setTheme(theme){
   if(!THEMES.some(t=>t.id===theme))return;
-  state.theme=theme;document.documentElement.dataset.theme=theme;document.documentElement.dataset.layout=theme;
+  state.theme=theme;document.documentElement.dataset.theme=theme;
   for(const b of document.querySelectorAll('[data-theme-pick]'))b.setAttribute('aria-pressed',String(b.dataset.themePick===theme));
   const t=THEMES.find(t=>t.id===theme);$('#theme-description').textContent=t.id+' · '+t.description;
   $('#theme-source').href=references[theme];$('#theme-source').textContent=t.source+' 参考';
-  render();
+  syncUrl();
 }
 function syncUrl(){if(location.protocol==='file:')return;const url=new URL(location.href);url.searchParams.set('theme',state.theme);url.searchParams.set('view',state.view);history.replaceState(null,'',url);}
 function setView(view){if(!views[view])return;state.view=view;render();}
@@ -59,19 +57,24 @@ function sampleFeedback(){
 }
 function render(){
   const active=document.activeElement;
-  const key=['account','add','remove','batch','step','inspect','workflowStep','workflowInspect'].find(key=>active?.dataset?.[key]);
-  const keepFocus=$('#preview-content').contains(active)?(active.id?'#'+CSS.escape(active.id):key?`[data-${key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase())}="${CSS.escape(active.dataset[key])}"]`:null):null;
+  const key=['account','add','remove'].find(key=>active?.dataset?.[key]);
+  const keepFocus=$('#preview-content').contains(active)?(active.id?'#'+CSS.escape(active.id):key?`[data-${key}="${CSS.escape(active.dataset[key])}"]`:null):null;
   const [name,subtitle]=views[state.view];$('#page-title').textContent=name;$('#breadcrumb').textContent=name;$('#page-subtitle').textContent=subtitle;
   for(const b of document.querySelectorAll('[data-view]'))b.setAttribute('aria-pressed',String(b.dataset.view===state.view));
   $('#sample-state').value=state.sample;
-  if(!sampleFeedback()){const html=({selection:selectionView,discovery:discoveryView,intake:intakeView,components:componentsView}[state.view])();$('#preview-content').innerHTML=['discovery','intake'].includes(state.view)?composeWorkflow(state.theme,state.view,html,state.workflowSteps[state.view],state.workflowSelected[state.view]):html;}
-  if(keepFocus){const replacement=document.querySelector(keepFocus);if(replacement&&!replacement.disabled&&replacement.getClientRects().length)replacement.focus({preventScroll:true});else{const current=$('#preview-content [aria-current=step]');current?.focus({preventScroll:true});}}
+  if(!sampleFeedback())$('#preview-content').innerHTML=({selection:selectionView,discovery:discoveryView,intake:intakeView,components:componentsView}[state.view])();
+  if(keepFocus){const replacement=document.querySelector(keepFocus);if(replacement&&!replacement.disabled)replacement.focus({preventScroll:true});}
   syncUrl();
 }
-const selectionView=createSelectionViews({state,provider,ACCOUNTS,PRODUCTS,art,badge,icon,escape,draftRows});
+function accountButtons(){return provider.accounts().map(a=>{const count=(state.drafts.get(a.id)||[]).length;return `<button type="button" class="account-button" data-account="${a.id}" aria-pressed="${a.id===state.account}"><strong>${a.name}</strong><small>${a.operator}</small><small>${count} / ${a.target} 已安排</small><span class="account-progress" aria-hidden="true"><i style="width:${Math.min(100,count/a.target*100)}%"></i></span></button>`;}).join('');}
+function selectionView(){
+  const a=provider.account(),count=provider.drafts().length;
+  return `<div class="selection-layout"><aside class="panel accounts-panel" aria-label="选择演示账号"><div class="panel-heading"><h2>今日账号</h2><span class="muted small">3</span></div><div class="account-buttons">${accountButtons()}</div></aside><div class="selection-center"><div class="account-summary"><div><h2>${a.name}</h2><p>${a.number} · 允许品类：${a.category}</p></div><div class="goal"><strong>${count}</strong> / ${a.target}<small>今日已安排</small></div></div><div class="panel"><div class="product-toolbar"><label class="search-field" for="product-search">${icon('search')}<input id="product-search" name="productSearch" type="search" value="${escape(state.search)}" placeholder="商品名、完整ID或群名称…" aria-label="搜索商品" autocomplete="off" spellcheck="false"></label><label for="history-filter" class="small muted" hidden>历史选品筛选</label><select id="history-filter" name="historyFilter" aria-label="历史选品筛选"><option value="all" ${state.historyFilter==='all'?'selected':''}>全部商品</option><option value="new" ${state.historyFilter==='new'?'selected':''}>未选过</option><option value="history" ${state.historyFilter==='history'?'selected':''}>历史选过</option></select></div><div class="table-scroll"><table class="data-table product-table"><thead><tr><th scope="col">商品</th><th scope="col">品类 / 日期</th><th scope="col">佣金 / 销量</th><th scope="col">历史与选择</th></tr></thead><tbody id="product-rows">${productRows()}</tbody></table></div><div class="table-note"><span id="product-count">${provider.visible().length} 件商品</span><span>完整ID按文本保留</span></div></div></div><aside class="panel draft-panel" aria-label="今日草稿"><div class="panel-heading"><h2>今日草稿</h2><span class="badge"><span id="draft-count">${count}</span> 件</span></div><p class="draft-meta">2026-10-16 · ${a.operator}</p><div id="draft-list">${draftRows()}</div><div class="panel-footer"><button type="button" class="button primary wide" id="preview-contract" ${count?'':'disabled'}>预览16列并核对 ${icon('arrow')}</button><p>当前仅预览草稿，不创建正式任务。</p></div></aside></div>`;
+}
+function productRows(){const list=provider.visible();if(!list.length)return '<tr><td colspan="4"><div class="empty-state"><h3>没有找到商品</h3><p>试试完整ID，或清空搜索和历史筛选。</p><button type="button" class="button" data-clear-search>清空筛选</button></div></td></tr>';return list.map(p=>{const added=provider.drafts().includes(p.id);return `<tr><td><div class="product-cell">${art(p)}<div><span class="product-name" title="${escape(p.name)}">${escape(p.name)}</span><span class="id">${p.id}</span></div></div></td><td><span>${p.category}</span><div class="muted small">${p.date}</div></td><td><div class="metric-stack"><b>佣金 ${p.commission}</b><br>总销 ${Number(p.totalSales).toLocaleString('zh-CN')} · 日销 ${p.dailySales}</div></td><td><div class="product-actions">${p.history.length?badge('本账号已选过 · '+p.history.at(-1).slice(5), 'warning','clock'):'<span class="available">符合当前账号品类</span>'}<button type="button" class="button ${added?'selected':''}" data-add="${p.id}" aria-pressed="${added}">${added?'已加入 · 移除':'加入草稿'}</button></div></td></tr>`;}).join('');}
 function draftRows(){const list=provider.drafts();if(!list.length)return `<div class="draft-empty">${icon('bag')}先从商品列表加入草稿。<br>历史商品有明确标记，仍可直接选择。</div>`;return `<div class="draft-rows">${list.map((id,i)=>{const p=PRODUCTS.find(p=>p.id===id);return `<div class="draft-row"><strong>${i+1}. ${p.name}</strong><p class="id">${id}</p><p>${p.group}</p><button type="button" class="button text compact" data-remove="${id}">移除</button></div>`;}).join('')}</div>`;}
-function refreshProducts(){if(state.view!=='selection')return;const input=$('#product-search'),position=input?.selectionStart;render();const replacement=$('#product-search');if(replacement){replacement.focus({preventScroll:true});if(position!==null)replacement.setSelectionRange(position,position);}}
-function chooseAccount(id){if(!ACCOUNTS.some(a=>a.id===id))return;if(id!==state.account)Object.assign(state.intake,{folder:false,scanned:false,verified:false,resolved:false,accepted:false});state.account=id;state.batchIds.clear();state.inspected='';render();}
+function refreshProducts(){if(state.view!=='selection')return;$('#product-rows').innerHTML=productRows();$('#product-count').textContent=provider.visible().length+' 件商品';}
+function chooseAccount(id){if(!ACCOUNTS.some(a=>a.id===id))return;if(id!==state.account)Object.assign(state.intake,{folder:false,scanned:false,verified:false,resolved:false,accepted:false});state.account=id;render();}
 function discoveryView(){const d=state.discovery;return `<div class="setup-layout"><div class="stack"><section class="panel"><div class="setup-intro"><span class="setup-symbol">${icon('monitor')}</span><div><h2>找到本机的素材软件</h2><p>先识别正在运行的软件。找不到时，选择软件所在文件夹辅助定位。</p></div></div><div class="setup-controls"><div class="actions"><button type="button" id="discover-software" class="button primary">${icon('search')}识别演示软件</button><button type="button" id="choose-software-folder" class="button">${icon('folder')}选择演示目录</button></div><label class="case-control">演示情形<select id="discovery-case" name="discoveryCase"><option value="found">找到一个软件</option><option value="missing" ${d.case==='missing'?'selected':''}>没有找到</option><option value="multiple" ${d.case==='multiple'?'selected':''}>找到多个软件</option><option value="stale" ${d.case==='stale'?'selected':''}>旧运行信息失效</option></select></label></div><div class="setup-result" id="discovery-results">${discoveryResults()}</div><details><summary>高级设置与路径依据</summary><p class="small muted" style="margin-top:10px">正式版仅检查软件运行信息和数据库结构；此处为虚构示例，不读取你的电脑。</p><div class="field-grid"><label class="field">本机端口<input readonly name="demoPort" value="59001"></label><label class="field">定位依据<input readonly name="demoRule" value="软件运行信息 + 本地数据目录"></label></div><label class="field" style="margin-top:14px">数据库完整路径<input readonly name="demoDatabase" value="C:\\演示数据\\素材助手\\db\\material.db"></label></details></section><div class="notice info">${icon('info')}<div><strong>找不到路径，也可以继续处理已有成果</strong><p>素材或剪辑已经在其他软件完成，可直接从外部成果接入开始。</p><button class="button text compact" type="button" data-go="intake">查看已有成果接入 ${icon('arrow')}</button></div></div></div><aside class="panel setup-help"><h2>连接分三步</h2><ol><li><strong>找到软件</strong>优先读取运行信息，不需要猜端口。</li><li><strong>核对候选</strong>显示版本、状态和路径；多份软件由你选定。</li><li><strong>保存连接</strong>保存不启动采集，仍在原软件中人工执行。</li></ol><p>公司机只需要完整便携包；开发环境不参与连接配置。</p></aside></div>`;}
 function discoveryResults(){const d=state.discovery;if(!d.ran)return `<div class="notice info">${icon('info')}<div><strong>还没有开始识别</strong><p>点击上方按钮，比较系统辅助配置的使用流程。</p></div></div>`;
   if(d.case==='missing'&&!d.chosen)return `<div class="notice warning">${icon('search')}<div><strong>没有找到演示软件</strong><p>可以选择软件所在文件夹，或先打开原软件再重新识别。</p></div></div>`;
@@ -98,30 +101,20 @@ $('#view-picker').innerHTML=Object.entries(views).map(([id,[name,,symbol]])=>`<b
 $('#theme-picker').addEventListener('click',event=>{const button=event.target.closest('[data-theme-pick]');if(button)setTheme(button.dataset.themePick);});
 $('#view-picker').addEventListener('click',event=>{const button=event.target.closest('[data-view]');if(button)setView(button.dataset.view);});
 $('#sample-state').addEventListener('change',event=>{state.sample=event.target.value;render();});
-$('#reset-preview').addEventListener('click',()=>{state.account='demo-food';state.batchIds.clear();state.inspected='';state.step=1;state.drawerOpen={};state.workflowSteps={discovery:1,intake:1};state.workflowSelected={discovery:0,intake:0};state.search='';state.historyFilter='all';state.sample='normal';state.drafts.clear();Object.assign(state.discovery,{case:'found',ran:false,selected:'one',saved:false,chosen:false});Object.assign(state.intake,{kind:'finished',case:'complete',table:false,folder:false,scanned:false,verified:false,resolved:false,accepted:false});render();notify('已重置虚构数据，保留当前风格。');});
+$('#reset-preview').addEventListener('click',()=>{state.account='demo-food';state.search='';state.historyFilter='all';state.sample='normal';state.drafts.clear();Object.assign(state.discovery,{case:'found',ran:false,selected:'one',saved:false,chosen:false});Object.assign(state.intake,{kind:'finished',case:'complete',table:false,folder:false,scanned:false,verified:false,resolved:false,accepted:false});render();notify('已重置虚构数据，保留当前风格。');});
 $('#preview-content').addEventListener('input',event=>{if(event.target.id==='product-search'){state.search=event.target.value;if(!event.isComposing)refreshProducts();}});
 $('#preview-content').addEventListener('compositionend',event=>{if(event.target.id==='product-search'){state.search=event.target.value;refreshProducts();}});
 $('#preview-content').addEventListener('change',event=>{
   const target=event.target;
-  if(target.id==='layout-account'){chooseAccount(target.value);return;}
-  if(target.id==='split-ratio'){state.splitRatio=target.value;render();return;}
-  if(target.dataset.batch){if(target.checked)state.batchIds.add(target.dataset.batch);else state.batchIds.delete(target.dataset.batch);render();return;}
-  if(target.id==='batch-all'){for(const p of provider.visible()){if(target.checked)state.batchIds.add(p.id);else state.batchIds.delete(p.id);}render();return;}
   if(target.id==='history-filter'){state.historyFilter=target.value;refreshProducts();}
   if(target.id==='discovery-case'){Object.assign(state.discovery,{case:target.value,ran:false,saved:false,chosen:false,selected:target.value==='multiple'?'':'one'});render();}
   if(target.name==='softwareCandidate'){state.discovery.selected=target.value;render();}
-  if(['intake-kind','intake-case','intake-account'].includes(target.id)){if(target.id==='intake-kind')state.intake.kind=target.value;if(target.id==='intake-case')state.intake.case=target.value;if(target.id==='intake-account'){state.account=target.value;state.batchIds.clear();state.inspected='';state.intake.folder=false;}Object.assign(state.intake,{scanned:false,verified:false,resolved:false,accepted:false});render();}
+  if(['intake-kind','intake-case','intake-account'].includes(target.id)){if(target.id==='intake-kind')state.intake.kind=target.value;if(target.id==='intake-case')state.intake.case=target.value;if(target.id==='intake-account'){state.account=target.value;state.intake.folder=false;}Object.assign(state.intake,{scanned:false,verified:false,resolved:false,accepted:false});render();}
   if(target.id==='verify-artifacts'){state.intake.verified=target.checked;$('#accept-artifacts').disabled=!target.checked||state.intake.accepted;}
-  if(target.id==='resolve-artifact-map'&&target.value){if(target.value!==provider.products()[1].id){notify('所选任务与演示文件的商品ID不一致，请重新核对。');return;}state.intake.resolved=true;state.intake.verified=false;render();notify('已明确指定演示任务归属，请继续人工核验。');}
+  if(target.id==='resolve-artifact-map'&&target.value){if(target.value!==provider.products()[1].id){notify('所选任务与演示文件的商品ID不一致，请重新核对。');return;}state.intake.resolved=true;state.intake.verified=false;$('#intake-results').innerHTML=intakeResults();notify('已明确指定演示任务归属，请继续人工核验。');}
 });
 $('#preview-content').addEventListener('click',event=>{
   const b=event.target.closest('button');if(!b||b.disabled)return;
-  if(b.hasAttribute('data-workflow-inspect')){state.workflowSelected[state.view]=Number(b.dataset.workflowInspect);render();return;}
-  if(b.dataset.workflowStep){state.workflowSteps[state.view]=Number(b.dataset.workflowStep);render();return;}
-  if(b.dataset.step){state.step=Number(b.dataset.step);render();$('#preview-content .wizard-stage')?.scrollIntoView({block:'nearest'});return;}
-  if(b.dataset.inspect){state.inspected=b.dataset.inspect;render();return;}
-  if(b.id==='batch-add'){for(const id of state.batchIds)provider.add(id);state.batchIds.clear();render();notify('已批量加入当前账号的演示草稿。');return;}
-  if(b.id==='batch-clear'){state.batchIds.clear();render();return;}
   if(b.dataset.account){chooseAccount(b.dataset.account);return;}
   if(b.dataset.add){const selected=provider.drafts().includes(b.dataset.add);if(selected)provider.remove(b.dataset.add);else provider.add(b.dataset.add);render();notify(selected?'已移出当前账号的演示草稿。':'已加入当前账号的演示草稿。');return;}
   if(b.dataset.remove){provider.remove(b.dataset.remove);render();notify('已移除演示草稿。');return;}
@@ -131,15 +124,14 @@ $('#preview-content').addEventListener('click',event=>{
   if(b.dataset.entryKind){if(state.intake.kind!==b.dataset.entryKind)Object.assign(state.intake,{scanned:false,verified:false,resolved:false,accepted:false});state.intake.kind=b.dataset.entryKind;state.sample='normal';setView('intake');return;}
   if(b.dataset.sampleAction){notify(b.dataset.sampleAction+'反馈示例，未执行真实业务。');return;}
   if(b.id==='preview-contract'){openContract();return;}
-  if(b.id==='discover-software'){state.discovery.ran=true;state.workflowSteps.discovery=2;render();notify('模拟识别完成，未读取本机软件。');return;}
+  if(b.id==='discover-software'){state.discovery.ran=true;render();notify('模拟识别完成，未读取本机软件。');return;}
   if(b.id==='choose-software-folder'){Object.assign(state.discovery,{ran:true,chosen:true,selected:'one',saved:false});render();notify('已选择虚构目录，未打开系统文件选择器。');return;}
-  if(b.id==='save-demo-connection'){if(!state.discovery.selected)return;state.discovery.saved=true;state.workflowSteps.discovery=3;render();notify('已保存演示连接，仅在本页生效。');return;}
-  if(b.id==='choose-task-table'){state.intake.table=true;state.intake.resolved=false;state.intake.verified=false;state.intake.scanned=false;state.intake.accepted=false;render();notify('已选择演示总任务表，未读取任何文件。');return;}
-  if(b.id==='choose-artifact-folder'){state.intake.folder=true;state.intake.resolved=false;state.intake.verified=false;state.intake.scanned=false;state.intake.accepted=false;render();notify('已选择虚构成果目录，未访问磁盘。');return;}
-  if(b.id==='scan-artifacts'){if(!state.intake.table||!state.intake.folder){notify('请先选择演示任务表和演示成果目录。');return;}Object.assign(state.intake,{scanned:true,verified:false,resolved:false,accepted:false});state.workflowSteps.intake=2;render();notify('演示匹配已完成，请核对归属和内容。');return;}
-  if(b.id==='accept-artifacts'){const i=state.intake;if(!i.verified||(['conflict','ambiguous'].includes(i.case)&&!i.resolved))return;i.accepted=true;state.workflowSteps.intake=3;render();notify('演示外部成果已人工核验并接纳，未启动软件。');}
+  if(b.id==='save-demo-connection'){if(!state.discovery.selected)return;state.discovery.saved=true;render();notify('已保存演示连接，仅在本页生效。');return;}
+  if(b.id==='choose-task-table'){state.intake.table=true;state.intake.scanned=false;state.intake.accepted=false;render();notify('已选择演示总任务表，未读取任何文件。');return;}
+  if(b.id==='choose-artifact-folder'){state.intake.folder=true;state.intake.scanned=false;state.intake.accepted=false;render();notify('已选择虚构成果目录，未访问磁盘。');return;}
+  if(b.id==='scan-artifacts'){if(!state.intake.table||!state.intake.folder){notify('请先选择演示任务表和演示成果目录。');return;}Object.assign(state.intake,{scanned:true,verified:false,accepted:false});render();notify('演示匹配已完成，请核对归属和内容。');return;}
+  if(b.id==='accept-artifacts'){const i=state.intake;if(!i.verified||(['conflict','ambiguous'].includes(i.case)&&!i.resolved))return;i.accepted=true;render();notify('演示外部成果已人工核验并接纳，未启动软件。');}
 });
-$('#preview-content').addEventListener('toggle',event=>{if(event.target.matches('.draft-drawer'))state.drawerOpen[state.theme]=event.target.open;},true);
 for(const id of ['close-dialog','dialog-done'])$('#'+id).addEventListener('click',()=>$('#preview-dialog').close());
 $('#preview-dialog').addEventListener('close',()=>dialogFocus?.isConnected&&dialogFocus.focus());
-const params=new URLSearchParams(location.search);if(views[params.get('view')])state.view=params.get('view');setTheme(params.get('theme')||'A');
+const params=new URLSearchParams(location.search);if(views[params.get('view')])state.view=params.get('view');setTheme(params.get('theme')||'A');render();

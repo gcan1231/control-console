@@ -15,6 +15,7 @@ from .importers import ImportFailure, parse_import
 from .materials import safe_component
 from .store import dump, now
 from .workbooks import task_workbook
+from .external_intake import external_material, _record as external_record
 
 
 class EditingService:
@@ -59,9 +60,10 @@ class EditingService:
     def _gate(self, conn, task_id):
         task=conn.execute('SELECT * FROM tasks WHERE id=?',(task_id,)).fetchone()
         material=conn.execute('SELECT payload FROM material_tasks WHERE task_id=?',(task_id,)).fetchone()
-        if not task or task['archived'] or not material or not json.loads(task['validation'])['ok']:
+        external=external_material(conn,task_id) if not material else None
+        if not task or task['archived'] or (not material and not external) or not json.loads(task['validation'])['ok']:
             raise ImportFailure('editing_gate','任务必须通过当前品类证据校验。')
-        fields=json.loads(task['fields']); material=json.loads(material[0])
+        fields=json.loads(task['fields']); material=json.loads(material[0]) if material else external
         if fields[12].strip() or fields[13].strip() or material['state']!='ready' or not material.get('confirmation') or not material.get('files'):
             raise ImportFailure('editing_gate','仅接受已人工复核素材且无发布回执的任务。')
         for file in material['files']:
@@ -103,6 +105,8 @@ class EditingService:
             raise ImportFailure('editing_selection','每包选择1—100个不同任务，且只能属于一个账号。')
         with self.store.connection(write=True) as conn:
             self.store._revalidate(conn)
+            if any(external_record(conn,i,'finished') for i in task_ids):
+                raise ImportFailure('editing_gate','任务已人工接纳外部成片，请继续发文交接，不能重复准备剪辑。')
             selected=[self._gate(conn,i) for i in task_ids]
             selected.sort(key=lambda t:(t[1][0],t[0]['source_row'],t[0]['batch_id']))
             if len({fields[3] for _,fields,_ in selected})!=1:
