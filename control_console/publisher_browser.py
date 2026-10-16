@@ -57,7 +57,7 @@ async def _connection(port):
     try:
         from playwright.async_api import async_playwright
     except ImportError as exc:
-        raise BrowserFailure("缺少Playwright；请在项目虚拟环境安装requirements-publishing.txt，不要全局安装") from exc
+        raise BrowserFailure("浏览器驱动依赖缺失；便携版请重新完整解压，源码版请在项目虚拟环境安装requirements-publishing.txt") from exc
     endpoint = await asyncio.to_thread(_endpoint, port)
     driver = await async_playwright().start()
     try:

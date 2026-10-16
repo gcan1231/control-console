@@ -19,7 +19,7 @@ def recognize_image(data: bytes) -> dict:
     try:
         from PIL import Image, UnidentifiedImageError
     except ImportError as exc:
-        raise RuntimeError("本地截图识别需要带Pillow的本机Python运行环境") from exc
+        raise RuntimeError("截图组件缺失；便携版请重新完整解压，或先使用表格文本粘贴导入") from exc
     if not isinstance(data, bytes) or not data or len(data) > MAX_BYTES:
         raise ValueError("截图为空或超过20MB限制")
     try:

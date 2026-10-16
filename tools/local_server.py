@@ -346,6 +346,7 @@ def main():
     parser = argparse.ArgumentParser(description='Local task import and SQLite workspace')
     parser.add_argument('--port',type=int,default=8861)
     parser.add_argument('--runtime-dir',type=Path,default=ROOT/'runtime')
+    parser.add_argument('--open-browser',action='store_true',help='Open local workspace after successful binding')
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error('port must be between 1 and 65535')
@@ -356,6 +357,9 @@ def main():
         parser.exit(1,f'Cannot start local service: {error}\nExisting processes are left untouched.\n')
     print(f'Local workspace: http://127.0.0.1:{args.port}/',flush=True)
     print('Online documents remain read-only. Publishing requires an explicitly confirmed batch.',flush=True)
+    if args.open_browser:
+        import webbrowser
+        webbrowser.open(f'http://127.0.0.1:{server.server_port}/')
     stop=threading.Event()
     def monitor():
         while not stop.wait(10):
