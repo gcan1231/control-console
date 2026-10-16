@@ -1,6 +1,7 @@
 """Exercise main's real three-second watcher with isolated fictional data."""
 import http.client
 import json
+import os
 from pathlib import Path
 import socket
 import subprocess
@@ -8,6 +9,8 @@ import sys
 import tempfile
 import time
 import unittest
+
+from tools.run_single_machine_checks import stop_owned
 
 
 class MainLogWatcherTests(unittest.TestCase):
@@ -22,7 +25,8 @@ class MainLogWatcherTests(unittest.TestCase):
                 process = subprocess.Popen(
                     [sys.executable, '-B', '-u', 'tools/local_server.py', '--port', str(port),
                      '--runtime-dir', str(root / 'runtime')],
-                    cwd=Path(__file__).resolve().parents[1], stdout=output, stderr=subprocess.STDOUT)
+                    cwd=Path(__file__).resolve().parents[1], stdout=output, stderr=subprocess.STDOUT,
+                    start_new_session=os.name != 'nt')
                 try:
                     def request(route, body=None, token=None):
                         connection = http.client.HTTPConnection('127.0.0.1', port, timeout=2)
@@ -69,13 +73,20 @@ class MainLogWatcherTests(unittest.TestCase):
                     self.assertEqual(next_round['total'], 1)
                     self.assertEqual(log.read_bytes(), original)
                 finally:
-                    # Stop only the Popen process created above, never a discovered PID.
-                    process.terminate()
-                    try:
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait(timeout=5)
+                    # Include the Windows venv launcher's child holding the output file.
+                    # Stop only this Popen tree, never a discovered PID.
+                    stop_owned(process)
+            # Windows may release the terminated child's inherited handle just after
+            # taskkill returns. Retry only our temporary output file, with a bound.
+            deadline = time.monotonic() + 5
+            while True:
+                try:
+                    (root / 'server-output.txt').unlink()
+                    break
+                except PermissionError:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.1)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,4 @@
+-r requirements-publishing.txt
+# Fictional OCR fixtures and an independent fixed-workbook consumer.
+Pillow==12.3.0
+openpyxl==3.1.5

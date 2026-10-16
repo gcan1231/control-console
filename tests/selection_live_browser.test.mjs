@@ -25,7 +25,7 @@ try{
  const old=(await state()).tasks;
  await page.locator('[data-add]').first().click();await idle();assert.equal(await page.locator('[data-edit]').count(),1);
  await page.locator('[data-edit]').click();await page.locator('[name="title"]').fill('中文输入虚构短标题');await page.locator('[name="portHint"]').fill('3');await page.locator('[data-form="draft"] button[type="submit"]').click();await idle();
- await page.reload();await idle();assert.match(await page.locator('.sel-draft-list').innerText(),/中文输入虚构短标题/);
+ await page.reload();await idle();await page.locator('[data-control="date"]').fill('2026-10-15');await page.locator('[data-control="date"]').dispatchEvent('change');await idle();assert.match(await page.locator('.sel-draft-list').innerText(),/中文输入虚构短标题/);
  await action('presets');await page.locator('[name="name"]').fill('虚构目标');await page.locator('[data-target-account]').first().fill('4');await page.locator('[data-form="preset"] button[type="submit"]').click();await idle();assert.equal(await page.locator('[data-edit]').count(),1);
  await page.locator('[data-control="presetId"]').selectOption('');await idle();await page.locator('[data-control="presetId"]').selectOption({label:'虚构目标'});await idle();assert.equal(await page.locator('[data-edit]').count(),1);
  checks.push('加入/编辑中文标题与J/刷新恢复/切换预设保留草稿');

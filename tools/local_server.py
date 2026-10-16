@@ -25,6 +25,7 @@ from control_console.account_capture import AccountCaptureService
 from control_console.selection import SelectionService
 from control_console.logs import LogService
 from control_console.publishing import PublishingService
+from control_console.publisher_execution import PublishExecutionService
 from tools.preview_server import resolve_request
 
 
@@ -32,6 +33,22 @@ class LocalHandler(BaseHTTPRequestHandler):
     server_version = 'LocalConsole/1'
 
     def json_response(self, status, value):
+        if status==403 and self.command=='POST' and not getattr(self,'_body_consumed',False):
+            # Small bodies may arrive immediately after the headers. Closing a
+            # socket with unread bytes can reset it before the client sees 403.
+            # Never drain a large/unbounded unauthorised body or wait indefinitely.
+            self.close_connection=True
+            try:length=int(self.headers.get('Content-Length','0'))
+            except ValueError:length=0
+            if 0<length<=4096:
+                previous=self.connection.gettimeout()
+                try:
+                    self.connection.settimeout(.25)
+                    self.rfile.read(length)
+                except OSError:pass
+                finally:
+                    try:self.connection.settimeout(previous)
+                    except OSError:pass
         content = json.dumps(value, ensure_ascii=False).encode('utf-8')
         self.send_response(status)
         self.send_header('Content-Type','application/json; charset=utf-8')
@@ -59,6 +76,11 @@ class LocalHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == '/api/health':
             self.json_response(200,{'ok':True,'version':1,'token':self.server.token,'capabilities':['local-import','state-storage','material-handoff','editing-handoff','account-workbench','merchant-locks','local-reference-watch','account-capture','daily-selection','log-center','manual-publishing']})
+        elif path == '/api/publishing/execution/state':
+            try:
+                self.json_response(200,self.server.publisher_execution.state())
+            except (OSError,sqlite3.Error):
+                self.json_response(500,{'ok':False,'error':{'code':'publishing_storage','message':'发文执行状态暂不可读，请检查运行目录。','details':[]}})
         elif path == '/api/publishing/state':
             try:
                 result=self.server.publishing.state()
@@ -181,6 +203,7 @@ class LocalHandler(BaseHTTPRequestHandler):
             self.send_error(404,'Static file not found')
 
     def do_POST(self):
+        self._body_consumed=False
         if not self.allowed_host():
             return
         origin = self.headers.get('Origin')
@@ -197,6 +220,7 @@ class LocalHandler(BaseHTTPRequestHandler):
             if not 0 < length <= 32 * 1024 * 1024:
                 self.json_response(413,{'ok':False,'error':{'code':'body_size','message':'请求超过本地导入大小限制。','details':[]}})
                 return
+            self._body_consumed=True
             body = json.loads(self.rfile.read(length))
             if not isinstance(body,dict):
                 raise ImportFailure('body','请求必须为JSON对象。')
@@ -221,12 +245,21 @@ class LocalHandler(BaseHTTPRequestHandler):
                     result = self.server.store.preview_import(body.get('kind'),filename,content,body.get('options'))
                 else:
                     result = self.server.store.commit_import(body.get('kind'),filename,content,body.get('options'))
-            elif path.startswith('/api/publishing/'):
-                operation=path.removeprefix('/api/publishing/')
-                if operation not in ('prepare','handoff','collect','verify'):
+            elif path.startswith('/api/publishing/execution/'):
+                operation=path.removeprefix('/api/publishing/execution/')
+                if operation not in ('probe','bind','template','start','control','reconcile'):
                     self.json_response(404,{'ok':False,'error':{'code':'route','message':'接口不存在。','details':[]}})
                     return
-                result=getattr(self.server.publishing,operation)(body)
+                result=getattr(self.server.publisher_execution,operation)(body)
+            elif path.startswith('/api/publishing/'):
+                operation=path.removeprefix('/api/publishing/')
+                if operation not in ('prepare','handoff','collect','collect_native','verify'):
+                    self.json_response(404,{'ok':False,'error':{'code':'route','message':'接口不存在。','details':[]}})
+                    return
+                if operation=='collect_native':
+                    evidence=self.server.publisher_execution.native_receipts(body.get('packageId'))
+                    result=self.server.publishing.collect_native(body,evidence)
+                else:result=getattr(self.server.publishing,operation)(body)
             elif path == '/api/logs/configure':
                 result = self.server.logs.configure(body)
             elif path == '/api/logs/poll':
@@ -301,6 +334,7 @@ def create_server(port, runtime_dir):
         server.selection = SelectionService(server.store,server.workbench)
         server.logs = LogService(runtime_dir, trusted_task_ids=lambda: {t['id'] for t in server.store.state()['tasks']})
         server.publishing = PublishingService(server.store,server.editing)
+        server.publisher_execution = PublishExecutionService(server.store,server.publishing,server.logs)
         server.token = secrets.token_urlsafe(32)
         return server
     except Exception:
@@ -317,10 +351,11 @@ def main():
         parser.error('port must be between 1 and 65535')
     try:
         server = create_server(args.port,args.runtime_dir)
+        server.publisher_execution.recover_interrupted()
     except OSError as error:
         parser.exit(1,f'Cannot start local service: {error}\nExisting processes are left untouched.\n')
     print(f'Local workspace: http://127.0.0.1:{args.port}/',flush=True)
-    print('Online documents remain read-only. No business software is executed.',flush=True)
+    print('Online documents remain read-only. Publishing requires an explicitly confirmed batch.',flush=True)
     stop=threading.Event()
     def monitor():
         while not stop.wait(10):
@@ -340,6 +375,7 @@ def main():
     def monitor_logs():
         while not stop.wait(3):
             try:
+                server.publisher_execution.poll_workers()
                 server.logs.poll()
             except (ImportFailure,OSError,sqlite3.Error,ValueError):
                 # Log collection cannot initiate work or change business results.

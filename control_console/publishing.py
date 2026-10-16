@@ -1,4 +1,4 @@
-"""007: isolated five-slot manual publishing handoffs; never launch publishers."""
+"""007: isolated five-slot handoffs; browser execution lives in its own module."""
 from __future__ import annotations
 import hashlib
 import json
@@ -184,7 +184,9 @@ class PublishingService:
     def handoff(self, body):
         if not isinstance(body,dict) or body.get('confirmed') is not True:self._fail('请确认人工已在原软件选入本包并将启动。')
         with self.store.connection(write=True) as conn:
-            package=self._package(conn,body);receipts=self._check(package)
+            package=self._package(conn,body)
+            if package.get('executionOwner'):self._fail('本包已由自动发文占用，不能再交给旧软件重复执行。')
+            receipts=self._check(package)
             if package['state']=='prepared' and any(r['M'] or r['N'] for r in receipts.values()):self._fail('新交接工作副本已有回执，不能重复启动。')
             if package['state']!='prepared':return {'ok':True,'package':package,'reused':True}
             package.update(state='handed_off',handoff={'confirmedAt':now(),'manual':True})
@@ -198,6 +200,7 @@ class PublishingService:
         if not isinstance(body,dict) or body.get('confirmedClosed') is not True:self._fail('请确认工作副本已保存并关闭。')
         with self.store.connection(write=True) as conn:
             package=self._package(conn,body)
+            if package.get('executionOwner'):self._fail('本包由自动发文管理，请查看逐项执行结果；不能混用旧软件回执。')
             if not package['handoff']:self._fail('请先记录人工交接。')
             receipts=self._check(package);records=[]
             receipt_raw=dump(receipts).encode('utf-8');receipt_hash=hashlib.sha256(receipt_raw).hexdigest()
@@ -216,6 +219,38 @@ class PublishingService:
             conn.execute('UPDATE publishing_packages SET payload=? WHERE id=?',(dump(package),package['id']))
         return {'ok':True,'package':package,'rows':len(records)}
 
+    def collect_native(self, body, evidence):
+        """Bridge completed native evidence into the existing receipt/review flow.
+
+        Evidence is obtained by the server from its execution service, never
+        accepted from an HTTP request. Source and isolated XLSX bytes stay intact.
+        """
+        if not isinstance(body,dict) or body.get('confirmed') is not True:self._fail('请确认回收自动执行结果，随后另行人工核验。')
+        with self.store.connection(write=True) as conn:
+            package=self._package(conn,body)
+            if package.get('executionOwner')!='native':self._fail('本包不是自动执行包。')
+            workbook_receipts=self._check(package)
+            if any(v for row in workbook_receipts.values() for v in row.values()):self._fail('自动执行工作副本被写入旧软件回执，请处理双执行冲突。')
+            if not isinstance(evidence,dict) or set(evidence)!=set(package['tasks']):self._fail('自动执行证据与任务清单不一致。')
+            required={'M','N'} if package['mode']=='both' else {'M'} if package['mode']=='douyin' else {'N'}
+            for row in evidence.values():
+                if not isinstance(row,dict) or not row.get('evidence') or any(row.get(k)!=({'M':'已发布','N':'计划已发布'}[k] if k in required else '') for k in ('M','N')):self._fail('自动执行尚无完整成功证据。')
+            raw=dump(evidence).encode('utf-8');sha=hashlib.sha256(raw).hexdigest()
+            path=self.store._path('publishing',package['id'],'native-receipts',sha+'.json')
+            for task_id,row in evidence.items():
+                record=json.loads(conn.execute('SELECT payload FROM publishing_tasks WHERE task_id=?',(task_id,)).fetchone()[0])
+                receipt={k:row[k] for k in ('M','N')}
+                if record.get('receipt') is not None:
+                    if record['receipt']!=receipt:self._fail('已有回执不同，不能覆盖。')
+                    continue
+                record.update(state='reported',receipt=receipt,collectedAt=now(),receiptSnapshot={'path':str(path),'sha256':sha,'source':'native-execution'})
+                conn.execute('UPDATE publishing_tasks SET payload=? WHERE task_id=?',(dump(record),task_id))
+            self._path(path,package['id']);self.store._write_once(path,raw)
+            package['nativeReceipt']=True
+            if package['state'] not in ('verified','reviewed'):package['state']='collected'
+            conn.execute('UPDATE publishing_packages SET payload=? WHERE id=?',(dump(package),package['id']))
+        return {'ok':True,'package':package,'rows':len(evidence)}
+
     def verify(self, body):
         if not isinstance(body,dict) or body.get('confirmed') is not True or body.get('result') not in ('verified','failed','unknown') or not isinstance(body.get('note'),str) or not body['note'].strip() or len(body['note'])>4000:self._fail('请明确人工核验结果并填写说明。')
         with self.store.connection(write=True) as conn:
@@ -223,7 +258,12 @@ class PublishingService:
             if task_id not in package['tasks']:self._fail('任务不属于本包。')
             receipts=self._check(package)
             record=json.loads(conn.execute('SELECT payload FROM publishing_tasks WHERE task_id=?',(task_id,)).fetchone()[0])
-            if record['receipt'] is not None and record['receipt']!=receipts[task_id]:self._fail('回执在回收后变化，请处理冲突后核验。')
+            if package.get('executionOwner')=='native':
+                if not package.get('nativeReceipt') or any(v for row in receipts.values() for v in row.values()):self._fail('请先回收完整自动执行证据，并确保未混用旧软件。')
+                snapshot=record.get('receiptSnapshot') or {}
+                snapshot_path=self._path(snapshot.get('path',''),package['id'])
+                if self.editing._identity(snapshot_path)['sha256']!=snapshot.get('sha256'):self._fail('自动执行回执快照发生变化。')
+            elif record['receipt'] is not None and record['receipt']!=receipts[task_id]:self._fail('回执在回收后变化，请处理冲突后核验。')
             if record['receipt'] is None:self._fail('先回收软件回执，再人工核验。')
             verification={'result':body['result'],'note':body['note'].strip()}
             if record.get('verification'):
