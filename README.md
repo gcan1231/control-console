@@ -63,7 +63,7 @@ python tools/preview_server.py
 
 ## 日常使用
 
-当前五风格选版预览：启动本地服务后打开`http://127.0.0.1:8861/theme-preview.html`；或执行`python -B tools/export_theme_preview.py`生成可直接双击的离线HTML。包含五种风格和四个视图，全部虚构、仅内存操作；选版前不替换正式页面。详见[五风格预览说明](docs/五风格预览与选版-007.md)。
+当前五风格选版预览：启动本地服务后打开`http://127.0.0.1:8861/theme-preview.html`；或执行`python -B tools/export_theme_preview.py`生成可直接双击的离线HTML。包含图片货架、表格批量、上下工作区、分步向导、快速检视五套不同布局和四个视图，全部虚构、仅内存操作；选版前不替换正式页面。详见[五风格预览说明](docs/五风格预览与选版-007.md)。
 
 公司电脑使用完整Windows便携包：解压后双击“启动总控制台.cmd”，无需安装Python、Node.js或运行依赖；详见[便携版说明](docs/使用说明-便携版.md)。仓库里的BAT、虚拟环境和测试命令面向开发，不是公司交付包。便携包不含真实账号与业务数据，data在首次运行时创建。
 

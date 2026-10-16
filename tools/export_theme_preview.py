@@ -12,7 +12,12 @@ def export(destination):
     fixtures = (ROOT / 'demo/data/theme-preview-fixtures.js').read_text(encoding='utf-8')
     javascript = (ROOT / 'demo/modules/theme-preview.js').read_text(encoding='utf-8')
     javascript = javascript.replace("import {THEMES, ACCOUNTS, PRODUCTS, HEADERS} from '../data/theme-preview-fixtures.js';", '')
-    script = (fixtures + '\n' + javascript).replace('</script', '<\\/script')
+    modules = []
+    for filename, symbol in [('theme-selection.js', 'createSelectionViews'), ('theme-workflows.js', 'composeWorkflow')]:
+        module = (ROOT / 'demo/modules' / filename).read_text(encoding='utf-8')
+        modules.append(module.replace('export function ', 'function '))
+        javascript = javascript.replace(f"import {{{symbol}}} from './{filename}';", '')
+    script = (fixtures + '\n' + '\n'.join(modules) + '\n' + javascript).replace('</script', '<\\/script')
     html = html.replace('<link rel="icon" href="/favicon.svg">', '')
     html = html.replace('<link rel="stylesheet" href="/theme-preview.css">', '<style>\n' + css + '\n</style>')
     html = html.replace('<script type="module" src="/modules/theme-preview.js"></script>', '<script type="module">\n' + script + '\n</script>')
